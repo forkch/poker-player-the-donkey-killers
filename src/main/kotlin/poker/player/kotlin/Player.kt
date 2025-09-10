@@ -214,25 +214,50 @@ class Player {
 
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
         val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
+        val position = getPosition(gameState, ourPlayer)
         
-        // Premium hands (AA, KK, QQ, AK) - raise aggressively
+        // Premium hands (AA, KK, QQ, AK) - raise aggressively regardless of position
         if (isPremiumHand(ourHoleCards)) {
             return raise(gameState, gameState.small_blind * 3)
         }
         
-        // Strong hands (JJ, 10-10, AQ, AJ, KQ) - moderate raise
+        // Strong hands (JJ, 10-10, 99, AQ, AJ, KQ, AT, KJ) - moderate raise
         if (isStrongHand(ourHoleCards)) {
             return raise(gameState, gameState.small_blind * 2)
         }
         
-        // Playable hands (suited connectors, medium pairs, suited aces)
+        // Playable hands - position-dependent strategy
         if (isPlayableHand(ourHoleCards)) {
-            // If no raise before us, limp in
+            val multiplier = if (position == "late") 1.5 else 1.0
+            
+            // If no raise before us, limp in (or raise in late position with good hands)
             if (gameState.current_buy_in <= gameState.small_blind * 2) {
+                // In late position with very playable hands, raise instead of limping
+                if (position == "late" && isVeryPlayable(ourHoleCards)) {
+                    return raise(gameState, gameState.small_blind * 2)
+                }
                 return stayInTheGame(gameState)
             }
-            // If there's a reasonable raise, call
-            if (gameState.current_buy_in <= gameState.small_blind * 4) {
+            
+            // Adjust calling thresholds based on position
+            val baseThreshold = gameState.small_blind * 6
+            val adjustedThreshold = (baseThreshold * multiplier).toInt()
+            
+            if (gameState.current_buy_in <= adjustedThreshold) {
+                return stayInTheGame(gameState)
+            }
+            
+            // Even call larger raises with very playable hands (more liberal in late position)
+            val veryPlayableThreshold = if (position == "late") 
+                gameState.small_blind * 10 else gameState.small_blind * 8
+            if (gameState.current_buy_in <= veryPlayableThreshold && isVeryPlayable(ourHoleCards)) {
+                return stayInTheGame(gameState)
+            }
+        }
+        
+        // In late position, play some marginal hands if action is light
+        if (position == "late" && gameState.current_buy_in <= gameState.small_blind * 2) {
+            if (isMarginalHand(ourHoleCards)) {
                 return stayInTheGame(gameState)
             }
         }
@@ -481,15 +506,17 @@ class Player {
         val suits = holeCards.map { it.suit }
         val suited = suits[0] == suits[1]
         
-        // Pocket pairs: JJ, 10-10
+        // Pocket pairs: JJ, 10-10, 99
         if (ranks[0] == ranks[1]) {
-            return ranks[0] in listOf("J", "10")
+            return ranks[0] in listOf("J", "10", "9")
         }
         
-        // High card combinations: AQ, AJ, KQ
+        // High card combinations: AQ, AJ, KQ, AT, KJ
         if (rankValues == listOf(12, 14)) return true // AQ
         if (rankValues == listOf(11, 14)) return true // AJ
         if (rankValues == listOf(12, 13)) return true // KQ
+        if (rankValues == listOf(10, 14)) return true // AT
+        if (rankValues == listOf(11, 13)) return true // KJ
         
         return false
     }
@@ -502,24 +529,107 @@ class Player {
         val suits = holeCards.map { it.suit }
         val suited = suits[0] == suits[1]
         
-        // Medium pocket pairs (99 down to 66)
+        // All pocket pairs (99 down to 22) - pairs have good implied odds
         if (ranks[0] == ranks[1]) {
             val pairValue = getRankValue(ranks[0])
-            return pairValue in 6..9
+            return pairValue in 2..8  // 99 is now in strong hands
         }
         
-        // Suited aces (A2s - A9s)
+        // Suited aces (A2s - A9s) - keep existing
         if (suited && rankValues[1] == 14 && rankValues[0] in 2..9) {
             return true
         }
         
-        // Suited connectors (78s and higher)
-        if (suited && rankValues[1] - rankValues[0] == 1 && rankValues[0] >= 7) {
+        // Suited kings (K2s - K9s) - add suited king hands
+        if (suited && rankValues[1] == 13 && rankValues[0] in 2..9) {
             return true
         }
         
-        // Suited one-gappers (79s, 8Ts, 9Js)
-        if (suited && rankValues[1] - rankValues[0] == 2 && rankValues[0] >= 7) {
+        // Suited connectors (56s and higher) - expand range
+        if (suited && rankValues[1] - rankValues[0] == 1 && rankValues[0] >= 5) {
+            return true
+        }
+        
+        // Suited one-gappers (57s, 68s, 79s, etc.) - expand range
+        if (suited && rankValues[1] - rankValues[0] == 2 && rankValues[0] >= 5) {
+            return true
+        }
+        
+        // Offsuit broadway combinations (QJ, QT, JT) - add some offsuit hands
+        if (rankValues == listOf(10, 12)) return true // QT
+        if (rankValues == listOf(11, 12)) return true // QJ
+        if (rankValues == listOf(10, 11)) return true // JT
+        
+        // Offsuit ace combinations (A9o - ATo) - add some offsuit aces
+        if (rankValues[1] == 14 && rankValues[0] in 9..10) {
+            return true
+        }
+        
+        return false
+    }
+
+    private fun isVeryPlayable(holeCards: List<Card>): Boolean {
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.sorted()
+        val rankValues = ranks.map { getRankValue(it) }.sorted()
+        val suits = holeCards.map { it.suit }
+        val suited = suits[0] == suits[1]
+        
+        // All pocket pairs are very playable
+        if (ranks[0] == ranks[1]) {
+            return true
+        }
+        
+        // Suited aces and kings
+        if (suited && (rankValues[1] == 14 || rankValues[1] == 13)) {
+            return true
+        }
+        
+        // Strong offsuit aces (A9o+)
+        if (rankValues[1] == 14 && rankValues[0] >= 9) {
+            return true
+        }
+        
+        return false
+    }
+
+    private fun getPosition(gameState: GameState, ourPlayer: PlayerInfo): String {
+        val activePlayers = gameState.players.filter { it.status == "active" }
+        val ourIndex = activePlayers.indexOfFirst { it.id == ourPlayer.id }
+        val dealerIndex = gameState.dealer % activePlayers.size
+        
+        // Calculate position relative to dealer
+        val positionFromDealer = (ourIndex - dealerIndex + activePlayers.size) % activePlayers.size
+        
+        return when {
+            activePlayers.size <= 2 -> "late" // In heads up, be more aggressive
+            positionFromDealer <= 1 -> "early" // First two positions after dealer
+            positionFromDealer >= activePlayers.size - 2 -> "late" // Last two positions
+            else -> "middle"
+        }
+    }
+
+    private fun isMarginalHand(holeCards: List<Card>): Boolean {
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.sorted()
+        val rankValues = ranks.map { getRankValue(it) }.sorted()
+        val suits = holeCards.map { it.suit }
+        val suited = suits[0] == suits[1]
+        
+        // Marginal offsuit broadway (K9o, Q9o, J9o)
+        if (rankValues == listOf(9, 13)) return true // K9o
+        if (rankValues == listOf(9, 12)) return true // Q9o  
+        if (rankValues == listOf(9, 11)) return true // J9o
+        
+        // Low suited connectors (45s, 34s)
+        if (suited && rankValues[1] - rankValues[0] == 1 && rankValues[0] >= 3 && rankValues[0] <= 4) {
+            return true
+        }
+        
+        // Suited wheel cards (A2s-A5s if not already covered)
+        if (suited && rankValues[1] == 14 && rankValues[0] in 2..5) {
             return true
         }
         
