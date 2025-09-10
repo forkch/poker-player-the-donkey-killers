@@ -7,7 +7,6 @@ import java.net.HttpURLConnection
 import java.io.OutputStreamWriter
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.random.Random
 
 data class Card(
     val rank: String,
@@ -176,7 +175,7 @@ class Player {
             }
         }
 
-        return stayInTheGame(gameState)
+        return fold(gameState)
     }
 
 
@@ -185,7 +184,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return stayInTheGame(gameState)
+                return fold(gameState)
             }
         }
 
@@ -195,7 +194,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return stayInTheGame(gameState)
+                    return fold(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 4) {
@@ -204,7 +203,7 @@ class Player {
             }
         }
 
-        return stayInTheGame(gameState)
+        return fold(gameState)
     }
 
     private fun allIn(gameState: GameState): Int {
@@ -217,7 +216,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return stayInTheGame(gameState)
+                return fold(gameState)
             }
         }
 
@@ -227,7 +226,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return stayInTheGame(gameState)
+                    return fold(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 4) {
@@ -237,7 +236,7 @@ class Player {
         }
 
 
-        return stayInTheGame(gameState)
+        return fold(gameState)
     }
 
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
@@ -245,7 +244,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasStraight(ourHoleCards, gameState.community_cards)) {
-                return stayInTheGame(gameState)
+                return fold(gameState)
             }
         }
 
@@ -255,7 +254,7 @@ class Player {
             if (ranking != null) {
                 // River: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return stayInTheGame(gameState)
+                    return fold(gameState)
                 }
                 if (ranking.rank >= 4) {
                     return allIn(gameState)
@@ -263,18 +262,20 @@ class Player {
             }
         }
 
-        return stayInTheGame(gameState)
+        return fold(gameState)
     }
 
 
-    private fun stayInTheGame(gameState: GameState): Int {
-        // If there's no bet (current_buy_in is 0), check (return 0)
-        if (gameState.current_buy_in == 0) {
-            return 0
-        }
+    private fun fold(gameState: GameState): Int {
+//        // If there's no bet (current_buy_in is 0), check (return 0)
+//        if (gameState.current_buy_in == 0) {
+//            return 0
+//        }
+//
+//        // If there's an outstanding bet, call (return current_buy_in)
+//        return gameState.current_buy_in
 
-        // If there's an outstanding bet, call (return current_buy_in)
-        return gameState.current_buy_in
+        return 0
 
     }
 
@@ -473,6 +474,6 @@ class Player {
     }
 
     fun version(): String {
-        return "everything >= 4 --> allin"
+        return "fold as default"
     }
 }
