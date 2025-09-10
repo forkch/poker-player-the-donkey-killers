@@ -196,6 +196,17 @@ class Player {
             updateGameLogs()
         }
 
+        // Output current dynamic factors to console
+        val pokerPhase = getPokerPhase(gameState.community_cards)
+        println("[FACTORS] Round ${gameState.round} - Phase: $pokerPhase")
+        println("[FACTORS] Aggressiveness Factor: $aggressivenessFactor")
+        println("[FACTORS] Hand Evaluation Factor: $handEvaluationFactor")
+        currentAnalysis?.let { analysis ->
+            println("[FACTORS] Win Rate: ${String.format("%.2f", analysis.winRate * 100)}%")
+            println("[FACTORS] Fold Rate: ${String.format("%.2f", analysis.foldRate * 100)}%")
+            println("[FACTORS] Average Aggressiveness: ${String.format("%.2f", analysis.averageAggressiveness * 100)}%")
+        }
+
         // Determine poker phase based on community cards
         return when (getPokerPhase(gameState.community_cards)) {
             PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
