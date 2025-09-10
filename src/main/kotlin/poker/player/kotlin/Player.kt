@@ -203,9 +203,6 @@ class Player {
         return stayInTheGame(gameState)
     }
 
-    private fun stayInTheGame(gameState: GameState): Int {
-        return gameState.current_buy_in
-    }
 
     private fun evaluateFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
         // Check for open-ended straight draw - stay in the hand
@@ -316,6 +313,9 @@ class Player {
         return stayInTheGame(gameState)
     }
 
+    private fun stayInTheGame(gameState: GameState): Int {
+        return gameState.current_buy_in
+    }
 
     private fun getDealer(gameState: GameState): PlayerInfo {
         return gameState.players.find { it.id == gameState.dealer }!!
