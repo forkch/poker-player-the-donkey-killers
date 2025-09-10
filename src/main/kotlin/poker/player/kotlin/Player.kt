@@ -163,21 +163,6 @@ class Player {
     }
 
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // If we are in small blind position
-        if (isSmallBlind(gameState, ourPlayer)) {
-            // If we have suited King or Ace, bet small blind
-            if (hasSuitedKingOrAce(ourPlayer)) {
-                return gameState.small_blind
-            } else {
-                // Otherwise bet big blind (small_blind * 2)
-                return gameState.small_blind * 2
-            }
-        }
-
-        // Pre-flop: if we have suited cards with King or Ace, bet small blind
-        if (hasSuitedKingOrAce(ourPlayer)) {
-            return gameState.small_blind * 2
-        }
 
         // Use ranking API to evaluate our hand strength
         val ourHoleCards = ourPlayer.hole_cards
@@ -190,7 +175,7 @@ class Player {
                 }
                 // Pre-flop: if rank >= 1, bet current_buy_in
                 if (ranking.rank >= 1) {
-                    return gameState.current_buy_in
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -219,7 +204,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return 0
+                    return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -227,7 +212,7 @@ class Player {
                 }
                 // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
                 if (ranking.rank >= 3) {
-                    return gameState.current_buy_in
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -256,7 +241,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return 0
+                    return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -264,7 +249,7 @@ class Player {
                 }
                 // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
                 if (ranking.rank >= 3) {
-                    return gameState.current_buy_in
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -282,7 +267,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasStraight(ourHoleCards, gameState.community_cards)) {
-                return 0  // Fold
+                return raise(gameState, gameState.small_blind * 2)
             }
         }
 
@@ -292,7 +277,7 @@ class Player {
             if (ranking != null) {
                 // River: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return 0
+                    return stayInTheGame(gameState)
                 }
                 // River: if rank >= 6, raise by big blind (most conservative)
                 if (ranking.rank >= 6) {
@@ -300,7 +285,7 @@ class Player {
                 }
                 // River: if rank >= 4, bet current_buy_in
                 if (ranking.rank >= 4) {
-                    return gameState.current_buy_in
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -314,8 +299,21 @@ class Player {
     }
 
     private fun stayInTheGame(gameState: GameState): Int {
+        // If there's no bet (current_buy_in is 0), check (return 0)
+        if (gameState.current_buy_in == 0) {
+            return 0
+        }
+
+        // If there's an outstanding bet, call (return current_buy_in)
         return gameState.current_buy_in
+
     }
+
+
+    private fun raise(gameState: GameState, raiseAmount: Int): Int {
+        return gameState.current_buy_in + raiseAmount
+    }
+
 
     private fun getDealer(gameState: GameState): PlayerInfo {
         return gameState.players.find { it.id == gameState.dealer }!!
