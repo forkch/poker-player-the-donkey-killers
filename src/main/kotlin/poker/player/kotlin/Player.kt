@@ -147,9 +147,9 @@ class Player {
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             // If we get a ranking response, we can use it for betting decisions
-            // For now, let's bet if we have any ranking result
-            if (ranking != null) {
-                return gameState.small_blind
+            if (ranking != null && ranking.rank >= 2) {
+                // If we get a rank >= 2, bet what the previous player bet
+                return gameState.current_buy_in
             }
         }
 
