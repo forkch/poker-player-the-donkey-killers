@@ -162,9 +162,20 @@ class Player {
     }
 
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
+        // If we are in small blind position
+        if (isSmallBlind(gameState, ourPlayer)) {
+            // If we have suited King or Ace, bet small blind
+            if (hasSuitedKingOrAce(ourPlayer)) {
+                return gameState.small_blind
+            } else {
+                // Otherwise bet big blind (small_blind * 2)
+                return gameState.small_blind * 2
+            }
+        }
+        
         // Pre-flop: if we have suited cards with King or Ace, bet small blind
         if (hasSuitedKingOrAce(ourPlayer)) {
-            return gameState.small_blind
+            return gameState.small_blind * 2
         }
 
         // Use ranking API to evaluate our hand strength
@@ -183,10 +194,11 @@ class Player {
             }
         }
 
-        // 30% of the time, just place the small blind
-        if (Random.nextFloat() < 0.1f) {
-            return gameState.small_blind
+        val probability = Random.nextFloat()
+        if (probability < 0.1f) {
+            return gameState.small_blind * 2 * 2
         }
+
 
         return 0
     }
@@ -199,7 +211,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return 0
+                    return gameState.small_blind
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -214,7 +226,7 @@ class Player {
 
         // 20% of the time, bet small blind (less aggressive than pre-flop)
         if (Random.nextFloat() < 0.2f) {
-            return gameState.small_blind
+            return gameState.small_blind * 2 * 2
         }
 
         return 0
@@ -256,6 +268,12 @@ class Player {
 
     private fun getFirstPlayer(gameState: GameState): PlayerInfo {
         return gameState.players.find { it.id == (gameState.dealer + 1) % (gameState.players.size) }!!
+    }
+
+    private fun isSmallBlind(gameState: GameState, player: PlayerInfo): Boolean {
+        // Small blind is the first player after the dealer
+        val smallBlindPosition = (gameState.dealer + 1) % gameState.players.size
+        return player.id == smallBlindPosition
     }
 
     // Legacy method for JSON compatibility
@@ -345,6 +363,6 @@ class Player {
     }
 
     fun version(): String {
-        return "Kotlin Player 0.0.1"
+        return "higher bets for suited cards depending on blind position"
     }
 }
