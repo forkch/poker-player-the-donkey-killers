@@ -164,21 +164,21 @@ class Player {
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
         val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
         
-        // Premium hands (AA, KK, QQ, AK) - raise very aggressively
+        // Premium hands (AA, KK, QQ, AK) - raise aggressively
         if (isPremiumHand(ourHoleCards)) {
-            return raise(gameState, gameState.small_blind * 6)
+            return raise(gameState, gameState.small_blind * 3)
         }
         
-        // Strong hands (JJ, 10-10, AQ, AJ, KQ) - raise aggressively
+        // Strong hands (JJ, 10-10, AQ, AJ, KQ) - moderate raise
         if (isStrongHand(ourHoleCards)) {
-            return raise(gameState, gameState.small_blind * 4)
+            return raise(gameState, gameState.small_blind * 2)
         }
         
         // Playable hands (suited connectors, medium pairs, suited aces)
         if (isPlayableHand(ourHoleCards)) {
-            // If no raise before us, raise instead of limping
+            // If no raise before us, limp in
             if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                return raise(gameState, gameState.small_blind * 3)
+                return stayInTheGame(gameState)
             }
             // If there's a reasonable raise, call
             if (gameState.current_buy_in <= gameState.small_blind * 4) {
@@ -197,23 +197,21 @@ class Player {
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            // Very strong hands (top pair or better) - bet aggressively for value
+            // Very strong hands (top pair or better) - bet for value
             if (ranking.rank >= 6) {
-                return raise(gameState, gameState.small_blind * 4)
+                return raise(gameState, gameState.small_blind * 2)
             }
             
-            // Good hands (pair, good draws) - bet more aggressively
+            // Good hands (pair, good draws) - bet or call
             if (ranking.rank >= 4) {
-                if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                    return raise(gameState, gameState.small_blind * 3)
-                } else if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - be more willing to continue
+            // Marginal hands - only continue if cheap
             if (ranking.rank >= 2) {
-                if (gameState.current_buy_in <= gameState.small_blind * 3) {
+                if (gameState.current_buy_in <= gameState.small_blind * 2) {
                     return stayInTheGame(gameState)
                 }
             }
@@ -221,10 +219,8 @@ class Player {
         
         // Check for drawing hands
         if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-            // Be more aggressive with draws - semi-bluff
-            if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                return raise(gameState, gameState.small_blind * 3)
-            } else if (gameState.current_buy_in <= gameState.small_blind * 4) {
+            // Stay in with draws if price is reasonable
+            if (gameState.current_buy_in <= gameState.small_blind * 3) {
                 return stayInTheGame(gameState)
             }
         }
@@ -244,36 +240,32 @@ class Player {
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            // Very strong hands - bet very aggressively for value
+            // Very strong hands - bet aggressively for value
             if (ranking.rank >= 7) {
-                return raise(gameState, gameState.small_blind * 5)
+                return raise(gameState, gameState.small_blind * 3)
             }
             
-            // Strong hands - aggressive betting
+            // Strong hands - moderate betting
             if (ranking.rank >= 5) {
-                if (gameState.current_buy_in <= gameState.small_blind * 3) {
-                    return raise(gameState, gameState.small_blind * 4)
-                } else if (gameState.current_buy_in <= gameState.small_blind * 5) {
+                if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                    return raise(gameState, gameState.small_blind * 2)
+                } else {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Good hands - be more willing to call and sometimes bet
+            // Good hands - call reasonable bets
             if (ranking.rank >= 3) {
-                if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                    return raise(gameState, gameState.small_blind * 3)
-                } else if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
         }
         
-        // Check for drawing hands - be more aggressive with strong draws
+        // Check for drawing hands - more selective on turn
         if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-            // Semi-bluff with strong draws
+            // Only continue with draws if very cheap (better pot odds needed)
             if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                return raise(gameState, gameState.small_blind * 3)
-            } else if (gameState.current_buy_in <= gameState.small_blind * 3) {
                 return stayInTheGame(gameState)
             }
         }
@@ -285,36 +277,34 @@ class Player {
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
         val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
         
-        // Check for completed straight - this is a GOOD hand, bet aggressively for value!
+        // Check for completed straight - this is a GOOD hand, bet for value!
         if (hasStraight(ourHoleCards, gameState.community_cards)) {
-            return raise(gameState, gameState.small_blind * 6)
+            return raise(gameState, gameState.small_blind * 4)
         }
         
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            // Premium hands - bet very big for maximum value
+            // Premium hands - bet big for value
             if (ranking.rank >= 8) {
-                return raise(gameState, gameState.small_blind * 6)
-            }
-            
-            // Very strong hands - bet aggressively for value
-            if (ranking.rank >= 6) {
                 return raise(gameState, gameState.small_blind * 4)
             }
             
-            // Good hands - bet for thin value instead of just calling
+            // Very strong hands - bet for value
+            if (ranking.rank >= 6) {
+                return raise(gameState, gameState.small_blind * 2)
+            }
+            
+            // Good hands - call or small bet
             if (ranking.rank >= 4) {
-                if (gameState.current_buy_in <= gameState.small_blind * 2) {
-                    return raise(gameState, gameState.small_blind * 3)
-                } else if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - be more willing to call
+            // Marginal hands - only call small bets
             if (ranking.rank >= 2) {
-                if (gameState.current_buy_in <= gameState.small_blind * 2) {
+                if (gameState.current_buy_in <= gameState.small_blind) {
                     return stayInTheGame(gameState)
                 }
             }
