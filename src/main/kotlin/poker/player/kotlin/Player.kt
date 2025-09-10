@@ -151,6 +151,10 @@ class Player {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             // If we get a ranking response, we can use it for betting decisions
             if (ranking != null) {
+                // If we get a rank >= 5, raise by big blind (add big blind to current_buy_in)
+                if (ranking.rank >= 5) {
+                    return gameState.current_buy_in + (gameState.small_blind * 2)
+                }
                 // Pre-flop: if no community cards and rank >= 1, bet current_buy_in
                 if (gameState.community_cards.isEmpty() && ranking.rank >= 1) {
                     return gameState.current_buy_in
@@ -162,7 +166,7 @@ class Player {
             }
         }
 
-// 30% of the time, just place the small blind (return 0)
+        // 30% of the time, just place the small blind (return 0)
         if (Random.nextFloat() < 0.3f) {
             return gameState.small_blind
         }
