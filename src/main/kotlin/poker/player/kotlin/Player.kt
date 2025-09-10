@@ -146,7 +146,7 @@ class Player {
         // Determine poker phase based on community cards
         return when (getPokerPhase(gameState.community_cards)) {
             PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
-            PokerPhase.FLOP, PokerPhase.TURN -> evaluateFlopTurn(gameState, ourPlayer)
+            PokerPhase.FLOP, PokerPhase.TURN -> evaluateTurn(gameState, ourPlayer)
             PokerPhase.RIVER -> evaluateRiver(gameState, ourPlayer)
         }
     }
@@ -191,7 +191,7 @@ class Player {
         return 0
     }
 
-    private fun evaluateFlopTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
+    private fun evaluateTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
         // Use ranking API to evaluate our hand strength
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
