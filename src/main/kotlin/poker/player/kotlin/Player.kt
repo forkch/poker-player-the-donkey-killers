@@ -175,7 +175,7 @@ class Player {
             }
         }
 
-        return fold(gameState)
+        return stayInTheGame(gameState)
     }
 
 
@@ -276,6 +276,18 @@ class Player {
 //        return gameState.current_buy_in
 
         return 0
+
+    }
+
+
+    private fun stayInTheGame(gameState: GameState): Int {
+        // If there's no bet (current_buy_in is 0), check (return 0)
+        if (gameState.current_buy_in == 0) {
+            return 0
+        }
+
+        // If there's an outstanding bet, call (return current_buy_in)
+        return gameState.current_buy_in
 
     }
 
@@ -474,6 +486,6 @@ class Player {
     }
 
     fun version(): String {
-        return "fold as default"
+        return "stay in the game for pre-flop"
     }
 }
