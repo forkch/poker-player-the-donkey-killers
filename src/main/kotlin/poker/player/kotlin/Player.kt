@@ -156,16 +156,16 @@ enum class PokerPhase {
 class Player {
     val numberOfPlayers = 4
 
-    // Game log storage - keep the last 10 games in memory
+    // Game log storage - keep the last 50 games in memory
     private val gameLogStorage = mutableListOf<GameLog>()
-    private val maxStoredGames = 10
+    private val maxStoredGames = 50
 
     // Current game analysis based on stored logs
     private var currentAnalysis: GameAnalysis? = null
 
-    // Game ID history - keep track of last 10 gameIds for fetching logs
+    // Game ID history - keep track of last 50 gameIds for fetching logs
     private val gameIdHistory = mutableListOf<Pair<String, String>>() // Pairs of (tournamentId, gameId)
-    private val maxGameHistory = 10
+    private val maxGameHistory = 50
 
     // Current game and tournament IDs for dynamic log fetching
     private var currentTournamentId: String? = null
@@ -182,7 +182,7 @@ class Player {
         val currentGamePair = Pair(gameState.tournament_id, gameState.game_id)
         if (!gameIdHistory.contains(currentGamePair)) {
             gameIdHistory.add(currentGamePair)
-            // Keep only the last 10 games
+            // Keep only the last 50 games
             while (gameIdHistory.size > maxGameHistory) {
                 gameIdHistory.removeAt(0)
             }
