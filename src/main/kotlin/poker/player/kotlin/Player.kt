@@ -163,6 +163,10 @@ class Player {
 
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
 
+        // Pre-flop: if we have suited cards with King or Ace, bet small blind
+        if (hasSuitedKingOrAce(ourPlayer)) {
+            return gameState.small_blind * 2
+        }
         // Use ranking API to evaluate our hand strength
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
