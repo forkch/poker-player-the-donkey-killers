@@ -184,7 +184,7 @@ class Player {
         }
 
         // 30% of the time, just place the small blind
-        if (Random.nextFloat() < 0.3f) {
+        if (Random.nextFloat() < 0.1f) {
             return gameState.small_blind
         }
 
