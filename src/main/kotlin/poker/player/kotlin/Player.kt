@@ -175,7 +175,7 @@ class Player {
                 }
                 // Pre-flop: if rank >= 1, bet current_buy_in
                 if (ranking.rank >= 1) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -185,7 +185,7 @@ class Player {
             return gameState.small_blind * 2 * 2
         }
 
-        return fold(gameState)
+        return stayInTheGame(gameState)
     }
 
 
@@ -194,7 +194,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return fold(gameState)
+                return stayInTheGame(gameState)
             }
         }
 
@@ -204,7 +204,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -212,7 +212,7 @@ class Player {
                 }
                 // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
                 if (ranking.rank >= 3) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -222,7 +222,7 @@ class Player {
             return gameState.small_blind * 2 * 2
         }
 
-        return fold(gameState)
+        return stayInTheGame(gameState)
     }
 
 
@@ -231,7 +231,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return fold(gameState)
+                return stayInTheGame(gameState)
             }
         }
 
@@ -241,7 +241,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -249,7 +249,7 @@ class Player {
                 }
                 // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
                 if (ranking.rank >= 3) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -259,7 +259,7 @@ class Player {
             return gameState.small_blind * 2 * 2
         }
 
-        return fold(gameState)
+        return stayInTheGame(gameState)
     }
 
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
@@ -277,7 +277,7 @@ class Player {
             if (ranking != null) {
                 // River: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
                 // River: if rank >= 6, raise by big blind (most conservative)
                 if (ranking.rank >= 6) {
@@ -285,7 +285,7 @@ class Player {
                 }
                 // River: if rank >= 4, bet current_buy_in
                 if (ranking.rank >= 4) {
-                    return fold(gameState)
+                    return stayInTheGame(gameState)
                 }
             }
         }
@@ -295,11 +295,7 @@ class Player {
             return gameState.small_blind
         }
 
-        return fold(gameState)
-    }
-
-    private fun fold(gameState: GameState): Int {
-            return 0
+        return stayInTheGame(gameState)
     }
 
 
