@@ -100,10 +100,10 @@ class Player {
         val round = gameState.round
 
         val ourPlayer = getOurPlayer(gameState)
-        println(ourPlayer)
 
         val ourIndex = ourPlayer.id
-        println(ourIndex)
+
+
 
         if (everyPlayersBetIsZero(gameState)) {
             return gameState.small_blind
