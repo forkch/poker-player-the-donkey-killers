@@ -1,6 +1,12 @@
 package poker.player.kotlin
 
 import org.json.JSONObject
+import org.json.JSONArray
+import java.net.URL
+import java.net.HttpURLConnection
+import java.io.OutputStreamWriter
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 data class Card(
     val rank: String,
@@ -31,6 +37,15 @@ data class GameState(
     val in_action: Int,
     val players: List<PlayerInfo>,
     val community_cards: List<Card>
+)
+
+data class RankingResponse(
+    val rank: Int,
+    val value: Int,
+    val second_value: Int,
+    val kickers: List<Int>,
+    val cards_used: List<Card>,
+    val cards: List<Card>
 )
 
 // Extension functions for parsing JSONObject to data classes
@@ -88,24 +103,54 @@ fun JSONObject.toGameState(): GameState {
     )
 }
 
+fun JSONObject.toRankingResponse(): RankingResponse {
+    val kickersArray = this.getJSONArray("kickers")
+    val kickers = (0 until kickersArray.length()).map { i ->
+        kickersArray.getInt(i)
+    }
+
+    val cardsUsedArray = this.getJSONArray("cards_used")
+    val cardsUsed = (0 until cardsUsedArray.length()).map { i ->
+        cardsUsedArray.getJSONObject(i).toCard()
+    }
+
+    val cardsArray = this.getJSONArray("cards")
+    val cards = (0 until cardsArray.length()).map { i ->
+        cardsArray.getJSONObject(i).toCard()
+    }
+
+    return RankingResponse(
+        rank = this.getInt("rank"),
+        value = this.getInt("value"),
+        second_value = this.getInt("second_value"),
+        kickers = kickers,
+        cards_used = cardsUsed,
+        cards = cards
+    )
+}
+
 class Player {
     val numberOfPlayers = 4
-    
-    fun betRequest(game_state: JSONObject): Int {
-        // Parse JSONObject to GameState data class
-        val gameState = game_state.toGameState()
-        
+
+    fun betRequest(gameState: GameState): Int {
         val currentSmallBlind = gameState.small_blind
-        val indexOfDealer = gameState.dealer
         val round = gameState.round
+
+        val dealer = getDealer(gameState)
 
         val ourPlayer = getOurPlayer(gameState)
 
         val ourIndex = ourPlayer.id
 
-        // Check if we have K and A in our hole cards
-        if (hasKingAce(ourPlayer)) {
-            return gameState.small_blind
+        // Use ranking API to evaluate our hand strength
+        val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            val ranking = getRanking(ourHoleCards, gameState.community_cards)
+            // If we get a ranking response, we can use it for betting decisions
+            // For now, let's bet if we have any ranking result
+            if (ranking != null) {
+                return gameState.small_blind
+            }
         }
 
         if (everyPlayersBetIsZero(gameState)) {
@@ -115,11 +160,24 @@ class Player {
         return 0
     }
 
+    private fun getDealer(gameState: GameState): PlayerInfo {
+        return gameState.players.find { it.id == gameState.dealer }!!
+    }
+
+    private fun getFirstPlayer(gameState: GameState): PlayerInfo {
+        return gameState.players.find { it.id == (gameState.dealer + 1) % (gameState.players.size) }!!
+    }
+
+    // Legacy method for JSON compatibility
+    fun betRequest(game_state: JSONObject): Int {
+        return betRequest(game_state.toGameState())
+    }
+
     private fun everyPlayersBetIsZero(gameState: GameState): Boolean {
         val activePlayers = gameState.players.filter { player ->
             player.bet != 0 && player.status.equals("active", true)
         }
-        
+
         return activePlayers.isEmpty()
     }
 
@@ -132,11 +190,51 @@ class Player {
 
     private fun hasKingAce(player: PlayerInfo): Boolean {
         val holeCards = player.hole_cards ?: return false
-        
+
         if (holeCards.size != 2) return false
-        
+
         val ranks = holeCards.map { it.rank }.toSet()
         return ranks.contains("K") && ranks.contains("A")
+    }
+
+    private fun getRanking(holeCards: List<Card>, communityCards: List<Card>): RankingResponse? {
+        return try {
+            val allCards = holeCards + communityCards
+            val cardsJson = JSONArray()
+            
+            allCards.forEach { card ->
+                val cardJson = JSONObject()
+                cardJson.put("rank", card.rank)
+                cardJson.put("suit", card.suit)
+                cardsJson.put(cardJson)
+            }
+            
+            val url = URL("https://rainman.leanpoker.org/rank")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.doOutput = true
+            
+            val postData = "cards=$cardsJson"
+            val writer = OutputStreamWriter(connection.outputStream)
+            writer.write(postData)
+            writer.flush()
+            writer.close()
+            
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                val response = reader.readText()
+                reader.close()
+                
+                val responseJson = JSONObject(response)
+                responseJson.toRankingResponse()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun showdown() {

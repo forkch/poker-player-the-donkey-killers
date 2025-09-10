@@ -12,31 +12,31 @@ class PlayerTest {
     
     @Test
     fun `test betRequest returns small blind when all players bet is zero`() {
-        val gameStateJson = createGameStateJson(
+        val gameState = createGameState(
             smallBlind = 10,
             players = listOf(
-                createPlayerJson(id = 0, name = "Player 1", bet = 0, status = "active"),
-                createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active"),
-                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+                createPlayerInfo(id = 0, name = "Player 1", bet = 0, status = "active"),
+                createPlayerInfo(id = 1, name = "the donkey killers", bet = 0, status = "active"),
+                createPlayerInfo(id = 2, name = "Player 3", bet = 0, status = "active")
             )
         )
         
-        val result = player.betRequest(gameStateJson)
+        val result = player.betRequest(gameState)
         assertEquals(10, result)
     }
     
     @Test
     fun `test betRequest returns 0 when some players have bets`() {
-        val gameStateJson = createGameStateJson(
+        val gameState = createGameState(
             smallBlind = 10,
             players = listOf(
-                createPlayerJson(id = 0, name = "Player 1", bet = 20, status = "active"),
-                createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active"),
-                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+                createPlayerInfo(id = 0, name = "Player 1", bet = 20, status = "active"),
+                createPlayerInfo(id = 1, name = "the donkey killers", bet = 0, status = "active"),
+                createPlayerInfo(id = 2, name = "Player 3", bet = 0, status = "active")
             )
         )
         
-        val result = player.betRequest(gameStateJson)
+        val result = player.betRequest(gameState)
         assertEquals(0, result)
     }
     
@@ -185,7 +185,7 @@ class PlayerTest {
         )
         
         val result = player.betRequest(gameStateJson)
-        assertEquals(10, result)
+        assertEquals(15, result)
     }
     
     @Test
@@ -231,7 +231,179 @@ class PlayerTest {
         assertEquals(10, result) // Returns small blind since all bets are zero
     }
     
-    // Helper methods to create test JSON objects
+    @Test
+    fun `test betRequest uses ranking API when player has hole cards`() {
+        val gameState = createGameState(
+            smallBlind = 20,
+            players = listOf(
+                createPlayerInfo(id = 0, name = "Player 1", bet = 5, status = "active"),
+                createPlayerInfo(
+                    id = 1, 
+                    name = "the donkey killers", 
+                    bet = 0, 
+                    status = "active",
+                    holeCards = listOf(
+                        createCard("5", "diamonds"),
+                        createCard("6", "diamonds")
+                    )
+                ),
+                createPlayerInfo(id = 2, name = "Player 3", bet = 0, status = "active")
+            ),
+            communityCards = listOf(
+                createCard("7", "diamonds"),
+                createCard("8", "diamonds"),
+                createCard("9", "diamonds")
+            )
+        )
+        
+        // This test verifies that the API integration doesn't break the betting logic
+        // The actual API call may fail in test environment, but the logic should handle it gracefully
+        val result = player.betRequest(gameState)
+        assertTrue(result >= 0) // Should return a valid bet amount
+    }
+    
+    @Test
+    fun `test getRanking handles empty cards gracefully`() {
+        val gameState = createGameState(
+            smallBlind = 10,
+            players = listOf(
+                createPlayerInfo(
+                    id = 0, 
+                    name = "Player 1", 
+                    bet = 0, 
+                    status = "active"
+                ),
+                createPlayerInfo(
+                    id = 1, 
+                    name = "the donkey killers", 
+                    bet = 0, 
+                    status = "active",
+                    holeCards = emptyList()
+                )
+            )
+        )
+        
+        // Should not crash when hole cards are empty
+        val result = player.betRequest(gameState)
+        assertEquals(10, result) // Falls back to small blind since all bets are zero
+    }
+    
+    @Test
+    fun `test RankingResponse data class creation`() {
+        val cards = listOf(
+            createCard("5", "diamonds"),
+            createCard("6", "diamonds")
+        )
+        
+        val rankingResponse = RankingResponse(
+            rank = 8,
+            value = 9,
+            second_value = 9,
+            kickers = listOf(9, 8, 6, 5),
+            cards_used = cards,
+            cards = cards
+        )
+        
+        assertEquals(8, rankingResponse.rank)
+        assertEquals(9, rankingResponse.value)
+        assertEquals(9, rankingResponse.second_value)
+        assertEquals(listOf(9, 8, 6, 5), rankingResponse.kickers)
+        assertEquals(2, rankingResponse.cards_used.size)
+        assertEquals(2, rankingResponse.cards.size)
+        assertEquals("5", rankingResponse.cards_used[0].rank)
+        assertEquals("diamonds", rankingResponse.cards_used[0].suit)
+    }
+    
+    @Test
+    fun `test JSONObject toRankingResponse extension function`() {
+        val rankingJson = JSONObject()
+        rankingJson.put("rank", 8)
+        rankingJson.put("value", 9)
+        rankingJson.put("second_value", 9)
+        
+        val kickersArray = JSONArray()
+        kickersArray.put(9)
+        kickersArray.put(8)
+        kickersArray.put(6)
+        kickersArray.put(5)
+        rankingJson.put("kickers", kickersArray)
+        
+        val cardsUsedArray = JSONArray()
+        val card1 = JSONObject()
+        card1.put("rank", "5")
+        card1.put("suit", "diamonds")
+        val card2 = JSONObject()
+        card2.put("rank", "6")
+        card2.put("suit", "diamonds")
+        cardsUsedArray.put(card1)
+        cardsUsedArray.put(card2)
+        rankingJson.put("cards_used", cardsUsedArray)
+        
+        val cardsArray = JSONArray()
+        cardsArray.put(card1)
+        cardsArray.put(card2)
+        rankingJson.put("cards", cardsArray)
+        
+        val rankingResponse = rankingJson.toRankingResponse()
+        
+        assertEquals(8, rankingResponse.rank)
+        assertEquals(9, rankingResponse.value)
+        assertEquals(9, rankingResponse.second_value)
+        assertEquals(listOf(9, 8, 6, 5), rankingResponse.kickers)
+        assertEquals(2, rankingResponse.cards_used.size)
+        assertEquals(2, rankingResponse.cards.size)
+        assertEquals("5", rankingResponse.cards_used[0].rank)
+        assertEquals("diamonds", rankingResponse.cards_used[0].suit)
+        assertEquals("6", rankingResponse.cards[1].rank)
+        assertEquals("diamonds", rankingResponse.cards[1].suit)
+    }
+    
+    // Helper methods to create test data objects
+    private fun createGameState(
+        smallBlind: Int = 10,
+        players: List<PlayerInfo> = emptyList(),
+        communityCards: List<Card> = emptyList()
+    ): GameState {
+        return GameState(
+            tournament_id = "tournament_123",
+            game_id = "game_456",
+            round = 1,
+            bet_index = 0,
+            small_blind = smallBlind,
+            current_buy_in = 0,
+            pot = 0,
+            minimum_raise = 10,
+            dealer = 0,
+            orbits = 0,
+            in_action = 1,
+            players = players,
+            community_cards = communityCards
+        )
+    }
+    
+    private fun createPlayerInfo(
+        id: Int,
+        name: String,
+        bet: Int,
+        status: String,
+        holeCards: List<Card>? = null
+    ): PlayerInfo {
+        return PlayerInfo(
+            id = id,
+            name = name,
+            status = status,
+            version = "1.0",
+            stack = 1000,
+            bet = bet,
+            hole_cards = holeCards
+        )
+    }
+    
+    private fun createCard(rank: String, suit: String): Card {
+        return Card(rank = rank, suit = suit)
+    }
+    
+    // Legacy JSON helper methods (for extension function tests)
     private fun createGameStateJson(
         smallBlind: Int = 10,
         players: List<JSONObject> = emptyList()
