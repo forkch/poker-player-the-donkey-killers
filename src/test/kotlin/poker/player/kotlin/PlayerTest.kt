@@ -132,6 +132,105 @@ class PlayerTest {
         assertEquals("the donkey killers", gameState.players[1].name)
     }
     
+    @Test
+    fun `test betRequest returns 10 when our player has K and A hole cards`() {
+        val ourPlayerJson = createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active")
+        
+        val holeCards = JSONArray()
+        val card1 = JSONObject()
+        card1.put("rank", "K")
+        card1.put("suit", "hearts")
+        val card2 = JSONObject() 
+        card2.put("rank", "A")
+        card2.put("suit", "spades")
+        holeCards.put(card1)
+        holeCards.put(card2)
+        ourPlayerJson.put("hole_cards", holeCards)
+        
+        val gameStateJson = createGameStateJson(
+            smallBlind = 10,
+            players = listOf(
+                createPlayerJson(id = 0, name = "Player 1", bet = 0, status = "active"),
+                ourPlayerJson,
+                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+            )
+        )
+        
+        val result = player.betRequest(gameStateJson)
+        assertEquals(10, result)
+    }
+    
+    @Test
+    fun `test betRequest returns 10 when our player has A and K hole cards in different order`() {
+        val ourPlayerJson = createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active")
+        
+        val holeCards = JSONArray()
+        val card1 = JSONObject()
+        card1.put("rank", "A")
+        card1.put("suit", "diamonds")
+        val card2 = JSONObject() 
+        card2.put("rank", "K")
+        card2.put("suit", "clubs")
+        holeCards.put(card1)
+        holeCards.put(card2)
+        ourPlayerJson.put("hole_cards", holeCards)
+        
+        val gameStateJson = createGameStateJson(
+            smallBlind = 15,
+            players = listOf(
+                createPlayerJson(id = 0, name = "Player 1", bet = 20, status = "active"),
+                ourPlayerJson,
+                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+            )
+        )
+        
+        val result = player.betRequest(gameStateJson)
+        assertEquals(10, result)
+    }
+    
+    @Test
+    fun `test betRequest does not return 10 when our player has K but not A`() {
+        val ourPlayerJson = createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active")
+        
+        val holeCards = JSONArray()
+        val card1 = JSONObject()
+        card1.put("rank", "K")
+        card1.put("suit", "hearts")
+        val card2 = JSONObject() 
+        card2.put("rank", "Q")
+        card2.put("suit", "spades")
+        holeCards.put(card1)
+        holeCards.put(card2)
+        ourPlayerJson.put("hole_cards", holeCards)
+        
+        val gameStateJson = createGameStateJson(
+            smallBlind = 10,
+            players = listOf(
+                createPlayerJson(id = 0, name = "Player 1", bet = 0, status = "active"),
+                ourPlayerJson,
+                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+            )
+        )
+        
+        val result = player.betRequest(gameStateJson)
+        assertEquals(10, result) // Returns small blind since all bets are zero
+    }
+    
+    @Test
+    fun `test betRequest does not return 10 when our player has no hole cards`() {
+        val gameStateJson = createGameStateJson(
+            smallBlind = 10,
+            players = listOf(
+                createPlayerJson(id = 0, name = "Player 1", bet = 0, status = "active"),
+                createPlayerJson(id = 1, name = "the donkey killers", bet = 0, status = "active"),
+                createPlayerJson(id = 2, name = "Player 3", bet = 0, status = "active")
+            )
+        )
+        
+        val result = player.betRequest(gameStateJson)
+        assertEquals(10, result) // Returns small blind since all bets are zero
+    }
+    
     // Helper methods to create test JSON objects
     private fun createGameStateJson(
         smallBlind: Int = 10,

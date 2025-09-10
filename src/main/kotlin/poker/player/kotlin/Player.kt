@@ -103,7 +103,10 @@ class Player {
 
         val ourIndex = ourPlayer.id
 
-
+        // Check if we have K and A in our hole cards
+        if (hasKingAce(ourPlayer)) {
+            return gameState.small_blind
+        }
 
         if (everyPlayersBetIsZero(gameState)) {
             return gameState.small_blind
@@ -125,6 +128,15 @@ class Player {
             player.name.equals("the donkey killers", true)
         }
         return ourPlayer ?: throw IllegalStateException("Our player not found in game state")
+    }
+
+    private fun hasKingAce(player: PlayerInfo): Boolean {
+        val holeCards = player.hole_cards ?: return false
+        
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.toSet()
+        return ranks.contains("K") && ranks.contains("A")
     }
 
     fun showdown() {
