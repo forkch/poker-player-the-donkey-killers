@@ -232,9 +232,9 @@ class Player {
         
         // Playable hands (suited connectors, medium pairs, suited aces)
         if (isPlayableHand(ourHoleCards)) {
-            // Apply hand evaluation factor to thresholds
-            val limpThreshold = (gameState.small_blind * 2 * handEvaluationFactor).toInt()
-            val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
+            // Apply hand evaluation factor to thresholds - more liberal thresholds
+            val limpThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
+            val callThreshold = (gameState.small_blind * 5 * handEvaluationFactor).toInt()
             
             // If no raise before us, limp in
             if (gameState.current_buy_in <= limpThreshold) {
@@ -268,15 +268,15 @@ class Player {
             
             // Good hands (pair, good draws) - bet or call
             if (adjustedRank >= 4) {
-                val callThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
+                val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
                 if (gameState.current_buy_in <= callThreshold) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - only continue if cheap
+            // Marginal hands - continue if reasonably priced
             if (adjustedRank >= 2) {
-                val cheapThreshold = (gameState.small_blind * 2 * handEvaluationFactor).toInt()
+                val cheapThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
                 if (gameState.current_buy_in <= cheapThreshold) {
                     return stayInTheGame(gameState)
                 }
@@ -328,7 +328,7 @@ class Player {
             
             // Good hands - call reasonable bets
             if (adjustedRank >= 3) {
-                val reasonableThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
+                val reasonableThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
                 if (gameState.current_buy_in <= reasonableThreshold) {
                     return stayInTheGame(gameState)
                 }
@@ -376,15 +376,15 @@ class Player {
             
             // Good hands - call or small bet
             if (adjustedRank >= 4) {
-                val callThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
+                val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
                 if (gameState.current_buy_in <= callThreshold) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - only call small bets
+            // Marginal hands - call reasonable bets to reach showdown
             if (adjustedRank >= 2) {
-                val smallBetThreshold = (gameState.small_blind * handEvaluationFactor).toInt()
+                val smallBetThreshold = (gameState.small_blind * 2 * handEvaluationFactor).toInt()
                 if (gameState.current_buy_in <= smallBetThreshold) {
                     return stayInTheGame(gameState)
                 }
@@ -882,25 +882,26 @@ class Player {
     
     private fun updateDynamicFactors() {
         currentAnalysis?.let { analysis ->
-            // Adjust aggressiveness based on win rate
+            // Adjust aggressiveness based on win rate - more balanced approach
             aggressivenessFactor = when {
-                analysis.winRate > 0.6 -> 1.3  // Winning a lot - be more aggressive
-                analysis.winRate > 0.4 -> 1.1  // Doing okay - slightly more aggressive
-                analysis.winRate > 0.2 -> 0.9  // Below average - be more conservative  
-                else -> 0.7  // Losing badly - be very conservative
+                analysis.winRate > 0.6 -> 1.4  // Winning a lot - be more aggressive
+                analysis.winRate > 0.4 -> 1.2  // Doing okay - moderately aggressive
+                analysis.winRate > 0.2 -> 1.0  // Below average - stay neutral
+                else -> 0.9  // Losing badly - slightly conservative but not overly so
             }
             
-            // Adjust hand evaluation based on fold rate
+            // Adjust hand evaluation based on fold rate - prevent over-tightening
             handEvaluationFactor = when {
-                analysis.foldRate > 0.7 -> 1.2  // Folding too much - loosen up
-                analysis.foldRate > 0.5 -> 1.0  // Normal folding
-                analysis.foldRate > 0.3 -> 0.9  // Not folding enough - tighten up
-                else -> 0.8  // Way too loose - tighten significantly
+                analysis.foldRate > 0.8 -> 1.3  // Folding way too much - loosen up significantly
+                analysis.foldRate > 0.6 -> 1.1  // Folding too much - loosen up moderately
+                analysis.foldRate > 0.4 -> 1.0  // Normal folding - stay neutral
+                analysis.foldRate > 0.2 -> 0.95 // Not folding enough - slightly tighter
+                else -> 0.9  // Way too loose - tighten but not drastically
             }
             
-            // Limit factors to reasonable ranges
-            aggressivenessFactor = aggressivenessFactor.coerceIn(0.5, 2.0)
-            handEvaluationFactor = handEvaluationFactor.coerceIn(0.5, 2.0)
+            // Limit factors to reasonable ranges that prevent over-conservative play
+            aggressivenessFactor = aggressivenessFactor.coerceIn(0.8, 2.0)
+            handEvaluationFactor = handEvaluationFactor.coerceIn(0.9, 2.0)
         }
     }
 
