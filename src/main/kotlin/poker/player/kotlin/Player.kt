@@ -170,19 +170,10 @@ class Player {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             if (ranking != null) {
                 // Pre-flop: if rank >= 5, raise by big blind
-                if (ranking.rank >= 5) {
-                    return gameState.current_buy_in + (gameState.small_blind * 2)
-                }
-                // Pre-flop: if rank >= 1, bet current_buy_in
-                if (ranking.rank >= 1) {
-                    return stayInTheGame(gameState)
+                if (ranking.rank >= 4) {
+                    return raiseByBigBlind(gameState)
                 }
             }
-        }
-
-        val probability = Random.nextFloat()
-        if (probability < 0.1f) {
-            return gameState.small_blind * 2 * 2
         }
 
         return stayInTheGame(gameState)
@@ -207,22 +198,17 @@ class Player {
                     return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
-                if (ranking.rank >= 5) {
-                    return gameState.current_buy_in + (gameState.small_blind * 2)
-                }
-                // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
-                if (ranking.rank >= 3) {
-                    return stayInTheGame(gameState)
+                if (ranking.rank >= 4) {
+                    return allIn(gameState)
                 }
             }
         }
 
-        // 20% of the time, bet small blind (less aggressive than pre-flop)
-        if (Random.nextFloat() < 0.2f) {
-            return gameState.small_blind * 2 * 2
-        }
-
         return stayInTheGame(gameState)
+    }
+
+    private fun allIn(gameState: GameState): Int {
+        return getOurPlayer(gameState).stack
     }
 
 
@@ -244,20 +230,12 @@ class Player {
                     return stayInTheGame(gameState)
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
-                if (ranking.rank >= 5) {
-                    return gameState.current_buy_in + (gameState.small_blind * 2)
-                }
-                // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
-                if (ranking.rank >= 3) {
-                    return stayInTheGame(gameState)
+                if (ranking.rank >= 4) {
+                    return allIn(gameState)
                 }
             }
         }
 
-        // 20% of the time, bet small blind (less aggressive than pre-flop)
-        if (Random.nextFloat() < 0.2f) {
-            return gameState.small_blind * 2 * 2
-        }
 
         return stayInTheGame(gameState)
     }
@@ -267,7 +245,7 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             if (hasStraight(ourHoleCards, gameState.community_cards)) {
-                return raise(gameState, gameState.small_blind * 2)
+                return stayInTheGame(gameState)
             }
         }
 
@@ -279,20 +257,10 @@ class Player {
                 if (ranking.rank < 2) {
                     return stayInTheGame(gameState)
                 }
-                // River: if rank >= 6, raise by big blind (most conservative)
-                if (ranking.rank >= 6) {
-                    return gameState.current_buy_in + (gameState.small_blind * 2)
-                }
-                // River: if rank >= 4, bet current_buy_in
                 if (ranking.rank >= 4) {
-                    return stayInTheGame(gameState)
+                    return allIn(gameState)
                 }
             }
-        }
-
-        // 10% of the time, bet small blind (least aggressive)
-        if (Random.nextFloat() < 0.1f) {
-            return gameState.small_blind
         }
 
         return stayInTheGame(gameState)
@@ -311,8 +279,8 @@ class Player {
     }
 
 
-    private fun raise(gameState: GameState, raiseAmount: Int): Int {
-        return gameState.current_buy_in + raiseAmount
+    private fun raiseByBigBlind(gameState: GameState): Int {
+        return gameState.current_buy_in + gameState.small_blind
     }
 
 
@@ -505,6 +473,6 @@ class Player {
     }
 
     fun version(): String {
-        return "never fold"
+        return "everything >= 4 --> allin"
     }
 }
