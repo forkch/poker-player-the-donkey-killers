@@ -145,6 +145,11 @@ class Player {
 
         val ourIndex = ourPlayer.id
 
+        // Pre-flop: if we have suited cards with King or Ace, bet small blind
+        if (gameState.community_cards.isEmpty() && hasSuitedKingOrAce(ourPlayer)) {
+            return gameState.small_blind
+        }
+
         // Use ranking API to evaluate our hand strength
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
@@ -210,6 +215,20 @@ class Player {
 
         val ranks = holeCards.map { it.rank }.toSet()
         return ranks.contains("K") && ranks.contains("A")
+    }
+
+    private fun hasSuitedKingOrAce(player: PlayerInfo): Boolean {
+        val holeCards = player.hole_cards ?: return false
+
+        if (holeCards.size != 2) return false
+
+        // Check if cards are suited (same suit)
+        val suits = holeCards.map { it.suit }.toSet()
+        if (suits.size != 1) return false
+
+        // Check if at least one card is King or Ace
+        val ranks = holeCards.map { it.rank }.toSet()
+        return ranks.contains("K") || ranks.contains("A")
     }
 
     private fun getRanking(holeCards: List<Card>, communityCards: List<Card>): RankingResponse? {
