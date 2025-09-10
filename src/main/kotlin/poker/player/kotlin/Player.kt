@@ -142,7 +142,7 @@ class Player {
 
     fun betRequest(gameState: GameState): Int {
         val ourPlayer = getOurPlayer(gameState)
-        
+
         // Determine poker phase based on community cards
         return when (getPokerPhase(gameState.community_cards)) {
             PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
@@ -172,7 +172,7 @@ class Player {
                 return gameState.small_blind * 2
             }
         }
-        
+
         // Pre-flop: if we have suited cards with King or Ace, bet small blind
         if (hasSuitedKingOrAce(ourPlayer)) {
             return gameState.small_blind * 2
@@ -199,8 +199,11 @@ class Player {
             return gameState.small_blind * 2 * 2
         }
 
+        return stayInTheGame(gameState)
+    }
 
-        return 0
+    private fun stayInTheGame(gameState: GameState): Int {
+        return gameState.current_buy_in
     }
 
     private fun evaluateFlopTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
@@ -211,7 +214,7 @@ class Player {
             if (ranking != null) {
                 // Flop/Turn: if rank < 2, fold
                 if (ranking.rank < 2) {
-                    return gameState.small_blind
+                    return 0
                 }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
@@ -229,7 +232,7 @@ class Player {
             return gameState.small_blind * 2 * 2
         }
 
-        return 0
+        return stayInTheGame(gameState)
     }
 
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
@@ -258,7 +261,7 @@ class Player {
             return gameState.small_blind
         }
 
-        return 0
+        return stayInTheGame(gameState)
     }
 
 
