@@ -207,8 +207,15 @@ class Player {
     }
 
     private fun evaluateFlopTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // Use ranking API to evaluate our hand strength
+        // Check for open-ended straight draw - stay in the hand
         val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
+                return stayInTheGame(gameState)
+            }
+        }
+
+        // Use ranking API to evaluate our hand strength
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             if (ranking != null) {
@@ -236,12 +243,19 @@ class Player {
     }
 
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // Use ranking API to evaluate our hand strength
+        // Check for completed straight - fold if we have one
         val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            if (hasStraight(ourHoleCards, gameState.community_cards)) {
+                return 0  // Fold
+            }
+        }
+
+        // Use ranking API to evaluate our hand strength
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             if (ranking != null) {
-                // Flop/Turn: if rank < 2, fold
+                // River: if rank < 2, fold
                 if (ranking.rank < 2) {
                     return 0
                 }
@@ -322,6 +336,92 @@ class Player {
         return ranks.contains("K") || ranks.contains("A")
     }
 
+    private fun hasOpenEndedStraightDraw(holeCards: List<Card>, communityCards: List<Card>): Boolean {
+        val allCards = holeCards + communityCards
+        val rankValues = allCards.map { getRankValue(it.rank) }.sorted().distinct()
+        
+        // Check for open-ended straight draws (need 4 consecutive cards with gaps at both ends)
+        for (i in 0..rankValues.size - 4) {
+            val consecutive = mutableListOf<Int>()
+            for (j in i until rankValues.size) {
+                if (consecutive.isEmpty() || rankValues[j] == consecutive.last() + 1) {
+                    consecutive.add(rankValues[j])
+                } else {
+                    break
+                }
+            }
+            
+            // Open-ended straight draw: exactly 4 consecutive cards where we can complete on both ends
+            if (consecutive.size == 4) {
+                val lowEnd = consecutive.first()
+                val highEnd = consecutive.last()
+                
+                // Check if we can complete on both ends (not at the extremes A-2-3-4 or J-Q-K-A)
+                if (lowEnd > 1 && highEnd < 14) {
+                    return true
+                }
+            }
+        }
+        
+        // Special case for A-2-3-4 (wheel straight draw)
+        val wheelCards = rankValues.filter { it == 1 || it in 2..4 }
+        if (wheelCards.size == 4 && wheelCards.contains(1) && wheelCards.contains(2) && 
+            wheelCards.contains(3) && wheelCards.contains(4)) {
+            return true
+        }
+        
+        return false
+    }
+
+    private fun hasStraight(holeCards: List<Card>, communityCards: List<Card>): Boolean {
+        val allCards = holeCards + communityCards
+        val rankValues = allCards.map { getRankValue(it.rank) }.sorted().distinct()
+        
+        // Check for 5 consecutive cards
+        for (i in 0..rankValues.size - 5) {
+            val consecutive = mutableListOf<Int>()
+            for (j in i until rankValues.size) {
+                if (consecutive.isEmpty() || rankValues[j] == consecutive.last() + 1) {
+                    consecutive.add(rankValues[j])
+                } else {
+                    break
+                }
+            }
+            
+            if (consecutive.size >= 5) {
+                return true
+            }
+        }
+        
+        // Special case for A-2-3-4-5 (wheel straight)
+        val wheelCards = rankValues.filter { it == 1 || it in 2..5 }
+        if (wheelCards.size >= 5 && wheelCards.contains(1) && wheelCards.contains(2) && 
+            wheelCards.contains(3) && wheelCards.contains(4) && wheelCards.contains(5)) {
+            return true
+        }
+        
+        return false
+    }
+
+    private fun getRankValue(rank: String): Int {
+        return when (rank) {
+            "2" -> 2
+            "3" -> 3
+            "4" -> 4
+            "5" -> 5
+            "6" -> 6
+            "7" -> 7
+            "8" -> 8
+            "9" -> 9
+            "10" -> 10
+            "J" -> 11
+            "Q" -> 12
+            "K" -> 13
+            "A" -> 14  // Ace high, but handled specially for wheel straights
+            else -> 0
+        }
+    }
+
     private fun getRanking(holeCards: List<Card>, communityCards: List<Card>): RankingResponse? {
         return try {
             val allCards = holeCards + communityCards
@@ -366,6 +466,6 @@ class Player {
     }
 
     fun version(): String {
-        return "let's stay in the game as long as its not less than 2"
+        return "open straight case"
     }
 }
