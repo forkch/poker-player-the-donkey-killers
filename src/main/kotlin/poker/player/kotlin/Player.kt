@@ -146,7 +146,8 @@ class Player {
         // Determine poker phase based on community cards
         return when (getPokerPhase(gameState.community_cards)) {
             PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
-            PokerPhase.FLOP, PokerPhase.TURN -> evaluateFlopTurn(gameState, ourPlayer)
+            PokerPhase.FLOP -> evaluateFlop(gameState, ourPlayer)
+            PokerPhase.TURN -> evaluateTurn(gameState, ourPlayer)
             PokerPhase.RIVER -> evaluateRiver(gameState, ourPlayer)
         }
     }
@@ -206,7 +207,44 @@ class Player {
         return gameState.current_buy_in
     }
 
-    private fun evaluateFlopTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
+    private fun evaluateFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
+        // Check for open-ended straight draw - stay in the hand
+        val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
+                return stayInTheGame(gameState)
+            }
+        }
+
+        // Use ranking API to evaluate our hand strength
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            val ranking = getRanking(ourHoleCards, gameState.community_cards)
+            if (ranking != null) {
+                // Flop/Turn: if rank < 2, fold
+                if (ranking.rank < 2) {
+                    return 0
+                }
+                // Flop/Turn: if rank >= 5, raise by big blind
+                if (ranking.rank >= 5) {
+                    return gameState.current_buy_in + (gameState.small_blind * 2)
+                }
+                // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
+                if (ranking.rank >= 3) {
+                    return gameState.current_buy_in
+                }
+            }
+        }
+
+        // 20% of the time, bet small blind (less aggressive than pre-flop)
+        if (Random.nextFloat() < 0.2f) {
+            return gameState.small_blind * 2 * 2
+        }
+
+        return stayInTheGame(gameState)
+    }
+
+
+    private fun evaluateTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
         // Check for open-ended straight draw - stay in the hand
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
@@ -366,7 +404,8 @@ class Player {
         // Special case for A-2-3-4 (wheel straight draw)
         val wheelCards = rankValues.filter { it == 1 || it in 2..4 }
         if (wheelCards.size == 4 && wheelCards.contains(1) && wheelCards.contains(2) &&
-            wheelCards.contains(3) && wheelCards.contains(4)) {
+            wheelCards.contains(3) && wheelCards.contains(4)
+        ) {
             return true
         }
 
@@ -396,7 +435,8 @@ class Player {
         // Special case for A-2-3-4-5 (wheel straight)
         val wheelCards = rankValues.filter { it == 1 || it in 2..5 }
         if (wheelCards.size >= 5 && wheelCards.contains(1) && wheelCards.contains(2) &&
-            wheelCards.contains(3) && wheelCards.contains(4) && wheelCards.contains(5)) {
+            wheelCards.contains(3) && wheelCards.contains(4) && wheelCards.contains(5)
+        ) {
             return true
         }
 
@@ -466,6 +506,6 @@ class Player {
     }
 
     fun version(): String {
-    return "higher bets for suited cards depending on blind position (reverted stay in the game)"
+        return "higher bets for suited cards depending on blind position (reverted stay in the game)"
     }
 }
