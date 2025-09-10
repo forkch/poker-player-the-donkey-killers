@@ -366,6 +366,6 @@ class Player {
     }
 
     fun version(): String {
-        return "higher bets for suited cards depending on blind position"
+        return "let's stay in the game as long as its not less than 2"
     }
 }
