@@ -162,51 +162,70 @@ class Player {
     }
 
     private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
-
-        // Pre-flop: if we have suited cards with King or Ace, bet small blind
-        if (hasSuitedKingOrAce(ourPlayer)) {
-            return gameState.small_blind * 2
+        val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
+        
+        // Premium hands (AA, KK, QQ, AK) - raise aggressively
+        if (isPremiumHand(ourHoleCards)) {
+            return raise(gameState, gameState.small_blind * 3)
         }
-        // Use ranking API to evaluate our hand strength
-        val ourHoleCards = ourPlayer.hole_cards
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            val ranking = getRanking(ourHoleCards, gameState.community_cards)
-            if (ranking != null) {
-                // Pre-flop: if rank >= 5, raise by big blind
-                if (ranking.rank >= 4) {
-                    return raiseByBigBlind(gameState)
-                }
+        
+        // Strong hands (JJ, 10-10, AQ, AJ, KQ) - moderate raise
+        if (isStrongHand(ourHoleCards)) {
+            return raise(gameState, gameState.small_blind * 2)
+        }
+        
+        // Playable hands (suited connectors, medium pairs, suited aces)
+        if (isPlayableHand(ourHoleCards)) {
+            // If no raise before us, limp in
+            if (gameState.current_buy_in <= gameState.small_blind * 2) {
+                return stayInTheGame(gameState)
+            }
+            // If there's a reasonable raise, call
+            if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                return stayInTheGame(gameState)
             }
         }
-
-        return stayInTheGame(gameState)
+        
+        // Everything else - fold to save chips for better spots
+        return fold(gameState)
     }
 
 
     private fun evaluateFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // Check for open-ended straight draw - stay in the hand
-        val ourHoleCards = ourPlayer.hole_cards
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return fold(gameState)
-            }
-        }
-
+        val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
+        
         // Use ranking API to evaluate our hand strength
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            val ranking = getRanking(ourHoleCards, gameState.community_cards)
-            if (ranking != null) {
-                // Flop/Turn: if rank < 2, fold
-                if (ranking.rank < 2) {
-                    return fold(gameState)
+        val ranking = getRanking(ourHoleCards, gameState.community_cards)
+        if (ranking != null) {
+            // Very strong hands (top pair or better) - bet for value
+            if (ranking.rank >= 6) {
+                return raise(gameState, gameState.small_blind * 2)
+            }
+            
+            // Good hands (pair, good draws) - bet or call
+            if (ranking.rank >= 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
+                    return stayInTheGame(gameState)
                 }
-                // Flop/Turn: if rank >= 5, raise by big blind
-                if (ranking.rank >= 4) {
-                    return allIn(gameState)
+            }
+            
+            // Marginal hands - only continue if cheap
+            if (ranking.rank >= 2) {
+                if (gameState.current_buy_in <= gameState.small_blind * 2) {
+                    return stayInTheGame(gameState)
                 }
             }
         }
-
+        
+        // Check for drawing hands
+        if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
+            // Stay in with draws if price is reasonable
+            if (gameState.current_buy_in <= gameState.small_blind * 3) {
+                return stayInTheGame(gameState)
+            }
+        }
+        
+        // Fold weak hands or if betting is too expensive
         return fold(gameState)
     }
 
@@ -216,56 +235,82 @@ class Player {
 
 
     private fun evaluateTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // Check for open-ended straight draw - stay in the hand
-        val ourHoleCards = ourPlayer.hole_cards
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
-                return fold(gameState)
-            }
-        }
-
+        val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
+        
         // Use ranking API to evaluate our hand strength
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            val ranking = getRanking(ourHoleCards, gameState.community_cards)
-            if (ranking != null) {
-                // Flop/Turn: if rank < 2, fold
-                if (ranking.rank < 2) {
-                    return fold(gameState)
+        val ranking = getRanking(ourHoleCards, gameState.community_cards)
+        if (ranking != null) {
+            // Very strong hands - bet aggressively for value
+            if (ranking.rank >= 7) {
+                return raise(gameState, gameState.small_blind * 3)
+            }
+            
+            // Strong hands - moderate betting
+            if (ranking.rank >= 5) {
+                if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                    return raise(gameState, gameState.small_blind * 2)
+                } else {
+                    return stayInTheGame(gameState)
                 }
-                // Flop/Turn: if rank >= 5, raise by big blind
-                if (ranking.rank >= 4) {
-                    return allIn(gameState)
+            }
+            
+            // Good hands - call reasonable bets
+            if (ranking.rank >= 3) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
+                    return stayInTheGame(gameState)
                 }
             }
         }
-
-
+        
+        // Check for drawing hands - more selective on turn
+        if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
+            // Only continue with draws if very cheap (better pot odds needed)
+            if (gameState.current_buy_in <= gameState.small_blind * 2) {
+                return stayInTheGame(gameState)
+            }
+        }
+        
+        // Fold weak hands or expensive draws
         return fold(gameState)
     }
 
     private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
-        // Check for completed straight - fold if we have one
-        val ourHoleCards = ourPlayer.hole_cards
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            if (hasStraight(ourHoleCards, gameState.community_cards)) {
-                return fold(gameState)
-            }
+        val ourHoleCards = ourPlayer.hole_cards ?: return fold(gameState)
+        
+        // Check for completed straight - this is a GOOD hand, bet for value!
+        if (hasStraight(ourHoleCards, gameState.community_cards)) {
+            return raise(gameState, gameState.small_blind * 4)
         }
-
+        
         // Use ranking API to evaluate our hand strength
-        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
-            val ranking = getRanking(ourHoleCards, gameState.community_cards)
-            if (ranking != null) {
-                // River: if rank < 2, fold
-                if (ranking.rank < 2) {
-                    return fold(gameState)
+        val ranking = getRanking(ourHoleCards, gameState.community_cards)
+        if (ranking != null) {
+            // Premium hands - bet big for value
+            if (ranking.rank >= 8) {
+                return raise(gameState, gameState.small_blind * 4)
+            }
+            
+            // Very strong hands - bet for value
+            if (ranking.rank >= 6) {
+                return raise(gameState, gameState.small_blind * 2)
+            }
+            
+            // Good hands - call or small bet
+            if (ranking.rank >= 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
+                    return stayInTheGame(gameState)
                 }
-                if (ranking.rank >= 4) {
-                    return allIn(gameState)
+            }
+            
+            // Marginal hands - only call small bets
+            if (ranking.rank >= 2) {
+                if (gameState.current_buy_in <= gameState.small_blind) {
+                    return stayInTheGame(gameState)
                 }
             }
         }
-
+        
+        // Weak hands - fold to preserve chips
         return fold(gameState)
     }
 
@@ -298,6 +343,10 @@ class Player {
 
     private fun raiseByBigBlind(gameState: GameState): Int {
         return gameState.current_buy_in + gameState.small_blind
+    }
+
+    private fun raise(gameState: GameState, raiseAmount: Int): Int {
+        return gameState.current_buy_in + raiseAmount
     }
 
 
@@ -356,6 +405,74 @@ class Player {
         // Check if at least one card is King or Ace
         val ranks = holeCards.map { it.rank }.toSet()
         return ranks.contains("K") || ranks.contains("A")
+    }
+
+    private fun isPremiumHand(holeCards: List<Card>): Boolean {
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.sorted()
+        val rankValues = ranks.map { getRankValue(it) }.sorted()
+        
+        // Pocket pairs: AA, KK, QQ
+        if (ranks[0] == ranks[1]) {
+            return ranks[0] in listOf("A", "K", "Q")
+        }
+        
+        // AK (suited or unsuited)
+        return rankValues == listOf(13, 14)
+    }
+
+    private fun isStrongHand(holeCards: List<Card>): Boolean {
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.sorted()
+        val rankValues = ranks.map { getRankValue(it) }.sorted()
+        val suits = holeCards.map { it.suit }
+        val suited = suits[0] == suits[1]
+        
+        // Pocket pairs: JJ, 10-10
+        if (ranks[0] == ranks[1]) {
+            return ranks[0] in listOf("J", "10")
+        }
+        
+        // High card combinations: AQ, AJ, KQ
+        if (rankValues == listOf(12, 14)) return true // AQ
+        if (rankValues == listOf(11, 14)) return true // AJ
+        if (rankValues == listOf(12, 13)) return true // KQ
+        
+        return false
+    }
+
+    private fun isPlayableHand(holeCards: List<Card>): Boolean {
+        if (holeCards.size != 2) return false
+        
+        val ranks = holeCards.map { it.rank }.sorted()
+        val rankValues = ranks.map { getRankValue(it) }.sorted()
+        val suits = holeCards.map { it.suit }
+        val suited = suits[0] == suits[1]
+        
+        // Medium pocket pairs (99 down to 66)
+        if (ranks[0] == ranks[1]) {
+            val pairValue = getRankValue(ranks[0])
+            return pairValue in 6..9
+        }
+        
+        // Suited aces (A2s - A9s)
+        if (suited && rankValues[1] == 14 && rankValues[0] in 2..9) {
+            return true
+        }
+        
+        // Suited connectors (78s and higher)
+        if (suited && rankValues[1] - rankValues[0] == 1 && rankValues[0] >= 7) {
+            return true
+        }
+        
+        // Suited one-gappers (79s, 8Ts, 9Js)
+        if (suited && rankValues[1] - rankValues[0] == 2 && rankValues[0] >= 7) {
+            return true
+        }
+        
+        return false
     }
 
     private fun hasOpenEndedStraightDraw(holeCards: List<Card>, communityCards: List<Card>): Boolean {
@@ -490,6 +607,6 @@ class Player {
     }
 
     fun version(): String {
-        return "big blind if suited high-card"
+        return "don't know what is happening as of now"
     }
 }
