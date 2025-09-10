@@ -490,6 +490,6 @@ class Player {
     }
 
     fun version(): String {
-        return "stay in the game for pre-flop"
+        return "big blind if suited high-card"
     }
 }
