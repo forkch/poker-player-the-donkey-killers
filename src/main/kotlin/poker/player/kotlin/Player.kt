@@ -130,23 +130,40 @@ fun JSONObject.toRankingResponse(): RankingResponse {
     )
 }
 
+enum class PokerPhase {
+    PRE_FLOP,
+    FLOP,
+    TURN,
+    RIVER
+}
+
 class Player {
     val numberOfPlayers = 4
 
     fun betRequest(gameState: GameState): Int {
-
-
-        val currentSmallBlind = gameState.small_blind
-        val round = gameState.round
-
-        val dealer = getDealer(gameState)
-
         val ourPlayer = getOurPlayer(gameState)
+        
+        // Determine poker phase based on community cards
+        return when (getPokerPhase(gameState.community_cards)) {
+            PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
+            PokerPhase.FLOP, PokerPhase.TURN -> evaluateFlopTurn(gameState, ourPlayer)
+            PokerPhase.RIVER -> evaluateRiver(gameState, ourPlayer)
+        }
+    }
 
-        val ourIndex = ourPlayer.id
+    private fun getPokerPhase(communityCards: List<Card>): PokerPhase {
+        return when (communityCards.size) {
+            0 -> PokerPhase.PRE_FLOP
+            3 -> PokerPhase.FLOP
+            4 -> PokerPhase.TURN
+            5 -> PokerPhase.RIVER
+            else -> PokerPhase.PRE_FLOP // Default to pre-flop for unexpected cases
+        }
+    }
 
+    private fun evaluatePreFlop(gameState: GameState, ourPlayer: PlayerInfo): Int {
         // Pre-flop: if we have suited cards with King or Ace, bet small blind
-        if (gameState.community_cards.isEmpty() && hasSuitedKingOrAce(ourPlayer)) {
+        if (hasSuitedKingOrAce(ourPlayer)) {
             return gameState.small_blind
         }
 
@@ -154,25 +171,70 @@ class Player {
         val ourHoleCards = ourPlayer.hole_cards
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
-            // If we get a ranking response, we can use it for betting decisions
             if (ranking != null) {
-                // If we get a rank >= 5, raise by big blind (add big blind to current_buy_in)
+                // Pre-flop: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
                     return gameState.current_buy_in + (gameState.small_blind * 2)
                 }
-                // Pre-flop: if no community cards and rank >= 1, bet current_buy_in
-                if (gameState.community_cards.isEmpty() && ranking.rank >= 1) {
-                    return gameState.current_buy_in
-                }
-                // If we get a rank >= 2, bet what the previous player bet
-                if (ranking.rank >= 2) {
+                // Pre-flop: if rank >= 1, bet current_buy_in
+                if (ranking.rank >= 1) {
                     return gameState.current_buy_in
                 }
             }
         }
 
-        // 30% of the time, just place the small blind (return 0)
+        // 30% of the time, just place the small blind
         if (Random.nextFloat() < 0.3f) {
+            return gameState.small_blind
+        }
+
+        return 0
+    }
+
+    private fun evaluateFlopTurn(gameState: GameState, ourPlayer: PlayerInfo): Int {
+        // Use ranking API to evaluate our hand strength
+        val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            val ranking = getRanking(ourHoleCards, gameState.community_cards)
+            if (ranking != null) {
+                // Flop/Turn: if rank >= 5, raise by big blind
+                if (ranking.rank >= 5) {
+                    return gameState.current_buy_in + (gameState.small_blind * 2)
+                }
+                // Flop/Turn: if rank >= 3, bet current_buy_in (more conservative than pre-flop)
+                if (ranking.rank >= 3) {
+                    return gameState.current_buy_in
+                }
+            }
+        }
+
+        // 20% of the time, bet small blind (less aggressive than pre-flop)
+        if (Random.nextFloat() < 0.2f) {
+            return gameState.small_blind
+        }
+
+        return 0
+    }
+
+    private fun evaluateRiver(gameState: GameState, ourPlayer: PlayerInfo): Int {
+        // Use ranking API to evaluate our hand strength
+        val ourHoleCards = ourPlayer.hole_cards
+        if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
+            val ranking = getRanking(ourHoleCards, gameState.community_cards)
+            if (ranking != null) {
+                // River: if rank >= 6, raise by big blind (most conservative)
+                if (ranking.rank >= 6) {
+                    return gameState.current_buy_in + (gameState.small_blind * 2)
+                }
+                // River: if rank >= 4, bet current_buy_in
+                if (ranking.rank >= 4) {
+                    return gameState.current_buy_in
+                }
+            }
+        }
+
+        // 10% of the time, bet small blind (least aggressive)
+        if (Random.nextFloat() < 0.1f) {
             return gameState.small_blind
         }
 
