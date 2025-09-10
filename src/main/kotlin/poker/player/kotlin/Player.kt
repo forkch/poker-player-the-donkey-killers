@@ -504,6 +504,6 @@ class Player {
     }
 
     fun version(): String {
-        return "higher bets for suited cards depending on blind position (reverted stay in the game)"
+        return "never fold"
     }
 }
