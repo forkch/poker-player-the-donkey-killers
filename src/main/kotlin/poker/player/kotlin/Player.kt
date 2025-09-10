@@ -165,9 +165,31 @@ class Player {
     // Dynamic adjustment factors (1.0 = normal, >1.0 = more aggressive, <1.0 = less aggressive)
     private var aggressivenessFactor = 1.0
     private var handEvaluationFactor = 1.0
+    
+    // Game ID history - keep track of last 10 gameIds for fetching logs
+    private val gameIdHistory = mutableListOf<Pair<String, String>>() // Pairs of (tournamentId, gameId)
+    private val maxGameHistory = 10
+    
+    // Current game and tournament IDs for dynamic log fetching
+    private var currentTournamentId: String? = null
+    private var currentGameId: String? = null
 
     fun betRequest(gameState: GameState): Int {
         val ourPlayer = getOurPlayer(gameState)
+
+        // Store current tournament and game IDs for dynamic log fetching
+        currentTournamentId = gameState.tournament_id
+        currentGameId = gameState.game_id
+
+        // Add current game to history if it's new
+        val currentGamePair = Pair(gameState.tournament_id, gameState.game_id)
+        if (!gameIdHistory.contains(currentGamePair)) {
+            gameIdHistory.add(currentGamePair)
+            // Keep only the last 10 games
+            while (gameIdHistory.size > maxGameHistory) {
+                gameIdHistory.removeAt(0)
+            }
+        }
 
         // Update game logs periodically (every few rounds to avoid excessive API calls)
         if (gameState.round % 5 == 0) {
@@ -663,35 +685,38 @@ class Player {
     }
 
     private fun fetchGameLogs(): List<GameLog> {
-        return try {
-            val url = URL("https://live.leanpoker.org/api/tournament/68bf3f775bca7800025c408e/game/68c17a995578320002c058af/log")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.setRequestProperty("Content-Type", "application/json")
-            
-            val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val reader = BufferedReader(InputStreamReader(connection.inputStream))
-                val response = reader.readText()
-                reader.close()
+        val allGameLogs = mutableListOf<GameLog>()
+        
+        // Iterate through all games in history and fetch logs for each
+        gameIdHistory.forEach { (tournamentId, gameId) ->
+            try {
+                val url = URL("https://live.leanpoker.org/api/tournament/$tournamentId/game/$gameId/log")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Content-Type", "application/json")
                 
-                val responseJson = JSONObject(response)
-                parseGameLogsFromResponse(responseJson)
-            } else {
-                emptyList()
+                val responseCode = connection.responseCode
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    val response = reader.readText()
+                    reader.close()
+                    
+                    val responseJson = JSONObject(response)
+                    val gameLogs = parseGameLogsFromResponse(responseJson, tournamentId, gameId)
+                    allGameLogs.addAll(gameLogs)
+                }
+            } catch (e: Exception) {
+                println("Error fetching game logs for game $gameId: ${e.message}")
             }
-        } catch (e: Exception) {
-            println("Error fetching game logs: ${e.message}")
-            emptyList()
         }
+        
+        return allGameLogs
     }
     
-    private fun parseGameLogsFromResponse(response: JSONObject): List<GameLog> {
+    private fun parseGameLogsFromResponse(response: JSONObject, tournamentId: String, gameId: String): List<GameLog> {
         val gameLogs = mutableListOf<GameLog>()
         try {
-            // Parse the response structure - assuming it contains game information
-            val gameId = response.optString("game_id", "unknown")
-            val tournamentId = response.optString("tournament_id", "unknown")
+            // Use the provided tournament and game IDs instead of parsing from response
             val timestamp = System.currentTimeMillis()
             
             // Extract rounds if they exist
@@ -716,12 +741,23 @@ class Player {
     }
     
     private fun addGameLog(gameLog: GameLog) {
-        gameLogStorage.add(gameLog)
-        // Keep only the last 10 games
-        while (gameLogStorage.size > maxStoredGames) {
-            gameLogStorage.removeAt(0)
+        // Check if we already have a log for this game
+        val existingLogIndex = gameLogStorage.indexOfFirst { 
+            it.gameId == gameLog.gameId && it.tournamentId == gameLog.tournamentId 
         }
-        // Update analysis after adding new log
+        
+        if (existingLogIndex >= 0) {
+            // Update existing log with newer data
+            gameLogStorage[existingLogIndex] = gameLog
+        } else {
+            // Add new log
+            gameLogStorage.add(gameLog)
+            // Keep only the last 10 games
+            while (gameLogStorage.size > maxStoredGames) {
+                gameLogStorage.removeAt(0)
+            }
+        }
+        // Update analysis after adding/updating log
         updateAnalysis()
     }
     
