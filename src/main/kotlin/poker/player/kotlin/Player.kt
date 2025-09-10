@@ -7,6 +7,7 @@ import java.net.HttpURLConnection
 import java.io.OutputStreamWriter
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import kotlin.random.Random
 
 data class Card(
     val rank: String,
@@ -133,6 +134,8 @@ class Player {
     val numberOfPlayers = 4
 
     fun betRequest(gameState: GameState): Int {
+
+
         val currentSmallBlind = gameState.small_blind
         val round = gameState.round
 
@@ -147,18 +150,26 @@ class Player {
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             // If we get a ranking response, we can use it for betting decisions
-            if (ranking != null && ranking.rank >= 2) {
+            if (ranking != null) {
+                // Pre-flop: if no community cards and rank >= 1, bet current_buy_in
+                if (gameState.community_cards.isEmpty() && ranking.rank >= 1) {
+                    return gameState.current_buy_in
+                }
                 // If we get a rank >= 2, bet what the previous player bet
-                return gameState.current_buy_in
+                if (ranking.rank >= 2) {
+                    return gameState.current_buy_in
+                }
             }
         }
 
-        if (everyPlayersBetIsZero(gameState)) {
+// 30% of the time, just place the small blind (return 0)
+        if (Random.nextFloat() < 0.3f) {
             return gameState.small_blind
         }
 
         return 0
     }
+
 
     private fun getDealer(gameState: GameState): PlayerInfo {
         return gameState.players.find { it.id == gameState.dealer }!!
@@ -201,32 +212,32 @@ class Player {
         return try {
             val allCards = holeCards + communityCards
             val cardsJson = JSONArray()
-            
+
             allCards.forEach { card ->
                 val cardJson = JSONObject()
                 cardJson.put("rank", card.rank)
                 cardJson.put("suit", card.suit)
                 cardsJson.put(cardJson)
             }
-            
+
             val url = URL("https://rainman.leanpoker.org/rank")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.doOutput = true
-            
+
             val postData = "cards=$cardsJson"
             val writer = OutputStreamWriter(connection.outputStream)
             writer.write(postData)
             writer.flush()
             writer.close()
-            
+
             val responseCode = connection.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val reader = BufferedReader(InputStreamReader(connection.inputStream))
                 val response = reader.readText()
                 reader.close()
-                
+
                 val responseJson = JSONObject(response)
                 responseJson.toRankingResponse()
             } else {
