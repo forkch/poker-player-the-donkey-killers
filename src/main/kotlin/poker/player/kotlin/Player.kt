@@ -339,7 +339,7 @@ class Player {
     private fun hasOpenEndedStraightDraw(holeCards: List<Card>, communityCards: List<Card>): Boolean {
         val allCards = holeCards + communityCards
         val rankValues = allCards.map { getRankValue(it.rank) }.sorted().distinct()
-        
+
         // Check for open-ended straight draws (need 4 consecutive cards with gaps at both ends)
         for (i in 0..rankValues.size - 4) {
             val consecutive = mutableListOf<Int>()
@@ -350,33 +350,33 @@ class Player {
                     break
                 }
             }
-            
+
             // Open-ended straight draw: exactly 4 consecutive cards where we can complete on both ends
             if (consecutive.size == 4) {
                 val lowEnd = consecutive.first()
                 val highEnd = consecutive.last()
-                
+
                 // Check if we can complete on both ends (not at the extremes A-2-3-4 or J-Q-K-A)
                 if (lowEnd > 1 && highEnd < 14) {
                     return true
                 }
             }
         }
-        
+
         // Special case for A-2-3-4 (wheel straight draw)
         val wheelCards = rankValues.filter { it == 1 || it in 2..4 }
-        if (wheelCards.size == 4 && wheelCards.contains(1) && wheelCards.contains(2) && 
+        if (wheelCards.size == 4 && wheelCards.contains(1) && wheelCards.contains(2) &&
             wheelCards.contains(3) && wheelCards.contains(4)) {
             return true
         }
-        
+
         return false
     }
 
     private fun hasStraight(holeCards: List<Card>, communityCards: List<Card>): Boolean {
         val allCards = holeCards + communityCards
         val rankValues = allCards.map { getRankValue(it.rank) }.sorted().distinct()
-        
+
         // Check for 5 consecutive cards
         for (i in 0..rankValues.size - 5) {
             val consecutive = mutableListOf<Int>()
@@ -387,19 +387,19 @@ class Player {
                     break
                 }
             }
-            
+
             if (consecutive.size >= 5) {
                 return true
             }
         }
-        
+
         // Special case for A-2-3-4-5 (wheel straight)
         val wheelCards = rankValues.filter { it == 1 || it in 2..5 }
-        if (wheelCards.size >= 5 && wheelCards.contains(1) && wheelCards.contains(2) && 
+        if (wheelCards.size >= 5 && wheelCards.contains(1) && wheelCards.contains(2) &&
             wheelCards.contains(3) && wheelCards.contains(4) && wheelCards.contains(5)) {
             return true
         }
-        
+
         return false
     }
 
@@ -466,6 +466,6 @@ class Player {
     }
 
     fun version(): String {
-        return "open straight case"
+        return "higher bets for suited cards depending on blind position"
     }
 }
