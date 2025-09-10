@@ -7,6 +7,7 @@ import java.net.HttpURLConnection
 import java.io.OutputStreamWriter
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.zip.GZIPInputStream
 
 data class Card(
     val rank: String,
@@ -129,13 +130,6 @@ fun JSONObject.toRankingResponse(): RankingResponse {
     )
 }
 
-enum class PokerPhase {
-    PRE_FLOP,
-    FLOP,
-    TURN,
-    RIVER
-}
-
 data class GameLog(
     val gameId: String,
     val tournamentId: String,
@@ -152,24 +146,27 @@ data class GameAnalysis(
     val averageBetSize: Double
 )
 
+enum class PokerPhase {
+    PRE_FLOP,
+    FLOP,
+    TURN,
+    RIVER
+}
+
 class Player {
     val numberOfPlayers = 4
-    
+
     // Game log storage - keep the last 10 games in memory
     private val gameLogStorage = mutableListOf<GameLog>()
     private val maxStoredGames = 10
-    
+
     // Current game analysis based on stored logs
     private var currentAnalysis: GameAnalysis? = null
-    
-    // Dynamic adjustment factors (1.0 = normal, >1.0 = more aggressive, <1.0 = less aggressive)
-    private var aggressivenessFactor = 1.0
-    private var handEvaluationFactor = 1.0
-    
+
     // Game ID history - keep track of last 10 gameIds for fetching logs
     private val gameIdHistory = mutableListOf<Pair<String, String>>() // Pairs of (tournamentId, gameId)
     private val maxGameHistory = 10
-    
+
     // Current game and tournament IDs for dynamic log fetching
     private var currentTournamentId: String? = null
     private var currentGameId: String? = null
@@ -196,17 +193,6 @@ class Player {
             updateGameLogs()
         }
 
-        // Output current dynamic factors to console
-        val pokerPhase = getPokerPhase(gameState.community_cards)
-        println("[FACTORS] Round ${gameState.round} - Phase: $pokerPhase")
-        println("[FACTORS] Aggressiveness Factor: $aggressivenessFactor")
-        println("[FACTORS] Hand Evaluation Factor: $handEvaluationFactor")
-        currentAnalysis?.let { analysis ->
-            println("[FACTORS] Win Rate: ${String.format("%.2f", analysis.winRate * 100)}%")
-            println("[FACTORS] Fold Rate: ${String.format("%.2f", analysis.foldRate * 100)}%")
-            println("[FACTORS] Average Aggressiveness: ${String.format("%.2f", analysis.averageAggressiveness * 100)}%")
-        }
-
         // Determine poker phase based on community cards
         return when (getPokerPhase(gameState.community_cards)) {
             PokerPhase.PRE_FLOP -> evaluatePreFlop(gameState, ourPlayer)
@@ -231,28 +217,22 @@ class Player {
         
         // Premium hands (AA, KK, QQ, AK) - raise aggressively
         if (isPremiumHand(ourHoleCards)) {
-            val raiseAmount = (gameState.small_blind * 3 * aggressivenessFactor).toInt()
-            return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            return raise(gameState, gameState.small_blind * 3)
         }
         
         // Strong hands (JJ, 10-10, AQ, AJ, KQ) - moderate raise
         if (isStrongHand(ourHoleCards)) {
-            val raiseAmount = (gameState.small_blind * 2 * aggressivenessFactor).toInt()
-            return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            return raise(gameState, gameState.small_blind * 2)
         }
         
         // Playable hands (suited connectors, medium pairs, suited aces)
         if (isPlayableHand(ourHoleCards)) {
-            // Apply hand evaluation factor to thresholds - more liberal thresholds
-            val limpThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
-            val callThreshold = (gameState.small_blind * 5 * handEvaluationFactor).toInt()
-            
             // If no raise before us, limp in
-            if (gameState.current_buy_in <= limpThreshold) {
+            if (gameState.current_buy_in <= gameState.small_blind * 2) {
                 return stayInTheGame(gameState)
             }
             // If there's a reasonable raise, call
-            if (gameState.current_buy_in <= callThreshold) {
+            if (gameState.current_buy_in <= gameState.small_blind * 4) {
                 return stayInTheGame(gameState)
             }
         }
@@ -268,27 +248,21 @@ class Player {
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            // Apply hand evaluation factor to rank thresholds
-            val adjustedRank = ranking.rank * handEvaluationFactor
-            
             // Very strong hands (top pair or better) - bet for value
-            if (adjustedRank >= 6) {
-                val raiseAmount = (gameState.small_blind * 2 * aggressivenessFactor).toInt()
-                return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            if (ranking.rank >= 6) {
+                return raise(gameState, gameState.small_blind * 2)
             }
             
             // Good hands (pair, good draws) - bet or call
-            if (adjustedRank >= 4) {
-                val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= callThreshold) {
+            if (ranking.rank >= 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - continue if reasonably priced
-            if (adjustedRank >= 2) {
-                val cheapThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= cheapThreshold) {
+            // Marginal hands - only continue if cheap
+            if (ranking.rank >= 2) {
+                if (gameState.current_buy_in <= gameState.small_blind * 2) {
                     return stayInTheGame(gameState)
                 }
             }
@@ -297,8 +271,7 @@ class Player {
         // Check for drawing hands
         if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
             // Stay in with draws if price is reasonable
-            val drawThreshold = (gameState.small_blind * 3 * handEvaluationFactor).toInt()
-            if (gameState.current_buy_in <= drawThreshold) {
+            if (gameState.current_buy_in <= gameState.small_blind * 3) {
                 return stayInTheGame(gameState)
             }
         }
@@ -318,29 +291,23 @@ class Player {
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            val adjustedRank = ranking.rank * handEvaluationFactor
-            
             // Very strong hands - bet aggressively for value
-            if (adjustedRank >= 7) {
-                val raiseAmount = (gameState.small_blind * 3 * aggressivenessFactor).toInt()
-                return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            if (ranking.rank >= 7) {
+                return raise(gameState, gameState.small_blind * 3)
             }
             
             // Strong hands - moderate betting
-            if (adjustedRank >= 5) {
-                val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= callThreshold) {
-                    val raiseAmount = (gameState.small_blind * 2 * aggressivenessFactor).toInt()
-                    return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            if (ranking.rank >= 5) {
+                if (gameState.current_buy_in <= gameState.small_blind * 4) {
+                    return raise(gameState, gameState.small_blind * 2)
                 } else {
                     return stayInTheGame(gameState)
                 }
             }
             
             // Good hands - call reasonable bets
-            if (adjustedRank >= 3) {
-                val reasonableThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= reasonableThreshold) {
+            if (ranking.rank >= 3) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
@@ -349,8 +316,7 @@ class Player {
         // Check for drawing hands - more selective on turn
         if (hasOpenEndedStraightDraw(ourHoleCards, gameState.community_cards)) {
             // Only continue with draws if very cheap (better pot odds needed)
-            val drawThreshold = (gameState.small_blind * 2 * handEvaluationFactor).toInt()
-            if (gameState.current_buy_in <= drawThreshold) {
+            if (gameState.current_buy_in <= gameState.small_blind * 2) {
                 return stayInTheGame(gameState)
             }
         }
@@ -364,39 +330,32 @@ class Player {
         
         // Check for completed straight - this is a GOOD hand, bet for value!
         if (hasStraight(ourHoleCards, gameState.community_cards)) {
-            val raiseAmount = (gameState.small_blind * 4 * aggressivenessFactor).toInt()
-            return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            return raise(gameState, gameState.small_blind * 4)
         }
         
         // Use ranking API to evaluate our hand strength
         val ranking = getRanking(ourHoleCards, gameState.community_cards)
         if (ranking != null) {
-            val adjustedRank = ranking.rank * handEvaluationFactor
-            
             // Premium hands - bet big for value
-            if (adjustedRank >= 8) {
-                val raiseAmount = (gameState.small_blind * 4 * aggressivenessFactor).toInt()
-                return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            if (ranking.rank >= 8) {
+                return raise(gameState, gameState.small_blind * 4)
             }
             
             // Very strong hands - bet for value
-            if (adjustedRank >= 6) {
-                val raiseAmount = (gameState.small_blind * 2 * aggressivenessFactor).toInt()
-                return raise(gameState, raiseAmount.coerceAtLeast(gameState.minimum_raise))
+            if (ranking.rank >= 6) {
+                return raise(gameState, gameState.small_blind * 2)
             }
             
             // Good hands - call or small bet
-            if (adjustedRank >= 4) {
-                val callThreshold = (gameState.small_blind * 4 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= callThreshold) {
+            if (ranking.rank >= 4) {
+                if (gameState.current_buy_in <= gameState.small_blind * 3) {
                     return stayInTheGame(gameState)
                 }
             }
             
-            // Marginal hands - call reasonable bets to reach showdown
-            if (adjustedRank >= 2) {
-                val smallBetThreshold = (gameState.small_blind * 2 * handEvaluationFactor).toInt()
-                if (gameState.current_buy_in <= smallBetThreshold) {
+            // Marginal hands - only call small bets
+            if (ranking.rank >= 2) {
+                if (gameState.current_buy_in <= gameState.small_blind) {
                     return stayInTheGame(gameState)
                 }
             }
@@ -695,9 +654,23 @@ class Player {
         }
     }
 
+    private fun updateGameLogs() {
+        try {
+            val newLogs = fetchGameLogs()
+            gameLogStorage.addAll(newLogs)
+            
+            // Keep only the most recent logs
+            while (gameLogStorage.size > maxStoredGames) {
+                gameLogStorage.removeAt(0)
+            }
+        } catch (e: Exception) {
+            println("Error updating game logs: ${e.message}")
+        }
+    }
+
     private fun fetchGameLogs(): List<GameLog> {
         val allGameLogs = mutableListOf<GameLog>()
-        
+
         // Iterate through all games in history and fetch logs for each
         gameIdHistory.forEach { (tournamentId, gameId) ->
             try {
@@ -705,13 +678,20 @@ class Player {
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
                 connection.setRequestProperty("Content-Type", "application/json")
-                
+
                 val responseCode = connection.responseCode
                 if (responseCode == HttpURLConnection.HTTP_OK) {
-                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    // Handle gzip compression
+                    val inputStream = if (connection.contentEncoding == "gzip") {
+                        GZIPInputStream(connection.inputStream)
+                    } else {
+                        connection.inputStream
+                    }
+                    
+                    val reader = BufferedReader(InputStreamReader(inputStream))
                     val response = reader.readText()
                     reader.close()
-                    
+
                     val responseJson = JSONObject(response)
                     val gameLogs = parseGameLogsFromResponse(responseJson, tournamentId, gameId)
                     allGameLogs.addAll(gameLogs)
@@ -720,16 +700,16 @@ class Player {
                 println("Error fetching game logs for game $gameId: ${e.message}")
             }
         }
-        
+
         return allGameLogs
     }
-    
+
     private fun parseGameLogsFromResponse(response: JSONObject, tournamentId: String, gameId: String): List<GameLog> {
         val gameLogs = mutableListOf<GameLog>()
         try {
             // Use the provided tournament and game IDs instead of parsing from response
             val timestamp = System.currentTimeMillis()
-            
+
             // Extract rounds if they exist
             val rounds = mutableListOf<JSONObject>()
             if (response.has("rounds")) {
@@ -738,188 +718,23 @@ class Player {
                     rounds.add(roundsArray.getJSONObject(i))
                 }
             }
-            
+
             // Extract final result if it exists
             val finalResult = if (response.has("result")) response.getJSONObject("result") else null
-            
+
             val gameLog = GameLog(gameId, tournamentId, timestamp, rounds, finalResult)
             gameLogs.add(gameLog)
-            
+
         } catch (e: Exception) {
-            println("Error parsing game logs: ${e.message}")
+            println("Error parsing game logs from response: ${e.message}")
         }
         return gameLogs
-    }
-    
-    private fun addGameLog(gameLog: GameLog) {
-        // Check if we already have a log for this game
-        val existingLogIndex = gameLogStorage.indexOfFirst { 
-            it.gameId == gameLog.gameId && it.tournamentId == gameLog.tournamentId 
-        }
-        
-        if (existingLogIndex >= 0) {
-            // Update existing log with newer data
-            gameLogStorage[existingLogIndex] = gameLog
-        } else {
-            // Add new log
-            gameLogStorage.add(gameLog)
-            // Keep only the last 10 games
-            while (gameLogStorage.size > maxStoredGames) {
-                gameLogStorage.removeAt(0)
-            }
-        }
-        // Update analysis after adding/updating log
-        updateAnalysis()
-    }
-    
-    private fun updateGameLogs() {
-        val newLogs = fetchGameLogs()
-        newLogs.forEach { addGameLog(it) }
-    }
-    
-    private fun updateAnalysis() {
-        if (gameLogStorage.isEmpty()) {
-            currentAnalysis = null
-            return
-        }
-        
-        var totalGames = 0
-        var wins = 0
-        var folds = 0
-        var bluffs = 0
-        var totalBets = 0.0
-        var betCount = 0
-        var aggressiveActions = 0
-        var totalActions = 0
-        
-        gameLogStorage.forEach { gameLog ->
-            totalGames++
-            
-            gameLog.rounds.forEach { round ->
-                try {
-                    // Analyze each round for patterns
-                    if (round.has("players")) {
-                        val players = round.getJSONArray("players")
-                        
-                        for (i in 0 until players.length()) {
-                            val player = players.getJSONObject(i)
-                            if (player.optString("name", "").contains("donkey-killers", true)) {
-                                // Our player - analyze our actions
-                                val action = player.optString("action", "")
-                                val betAmount = player.optDouble("bet", 0.0)
-                                
-                                totalActions++
-                                
-                                when (action.lowercase()) {
-                                    "fold" -> folds++
-                                    "raise", "all_in" -> {
-                                        aggressiveActions++
-                                        if (betAmount > 0) {
-                                            totalBets += betAmount
-                                            betCount++
-                                        }
-                                    }
-                                    "call" -> {
-                                        if (betAmount > 0) {
-                                            totalBets += betAmount
-                                            betCount++
-                                        }
-                                    }
-                                }
-                                
-                                // Simple bluff detection (raising with weak hands)
-                                if (action == "raise" && hasWeakHand(player)) {
-                                    bluffs++
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Skip problematic rounds
-                }
-            }
-            
-            // Check if we won this game
-            gameLog.finalResult?.let { result ->
-                try {
-                    if (result.has("winner") && 
-                        result.optString("winner", "").contains("donkey-killers", true)) {
-                        wins++
-                    }
-                } catch (e: Exception) {
-                    // Skip problematic results
-                }
-            }
-        }
-        
-        // Calculate metrics
-        val winRate = if (totalGames > 0) wins.toDouble() / totalGames else 0.0
-        val foldRate = if (totalActions > 0) folds.toDouble() / totalActions else 0.0
-        val aggressiveness = if (totalActions > 0) aggressiveActions.toDouble() / totalActions else 0.0
-        val bluffFrequency = if (totalActions > 0) bluffs.toDouble() / totalActions else 0.0
-        val averageBetSize = if (betCount > 0) totalBets / betCount else 0.0
-        
-        currentAnalysis = GameAnalysis(
-            averageAggressiveness = aggressiveness,
-            winRate = winRate,
-            foldRate = foldRate,
-            bluffFrequency = bluffFrequency,
-            averageBetSize = averageBetSize
-        )
-        
-        // Update dynamic factors based on analysis
-        updateDynamicFactors()
-    }
-    
-    private fun hasWeakHand(player: JSONObject): Boolean {
-        // Simplified weak hand detection - would need more sophisticated logic
-        return try {
-            if (player.has("hole_cards")) {
-                val holeCards = player.getJSONArray("hole_cards")
-                if (holeCards.length() >= 2) {
-                    val card1 = holeCards.getJSONObject(0)
-                    val card2 = holeCards.getJSONObject(1)
-                    val rank1 = getRankValue(card1.getString("rank"))
-                    val rank2 = getRankValue(card2.getString("rank"))
-                    
-                    // Consider weak if both cards are low (less than 8)
-                    rank1 < 8 && rank2 < 8
-                } else false
-            } else false
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
-    private fun updateDynamicFactors() {
-        currentAnalysis?.let { analysis ->
-            // Adjust aggressiveness based on win rate - more balanced approach
-            aggressivenessFactor = when {
-                analysis.winRate > 0.6 -> 1.4  // Winning a lot - be more aggressive
-                analysis.winRate > 0.4 -> 1.2  // Doing okay - moderately aggressive
-                analysis.winRate > 0.2 -> 1.0  // Below average - stay neutral
-                else -> 0.9  // Losing badly - slightly conservative but not overly so
-            }
-            
-            // Adjust hand evaluation based on fold rate - prevent over-tightening
-            handEvaluationFactor = when {
-                analysis.foldRate > 0.8 -> 1.3  // Folding way too much - loosen up significantly
-                analysis.foldRate > 0.6 -> 1.1  // Folding too much - loosen up moderately
-                analysis.foldRate > 0.4 -> 1.0  // Normal folding - stay neutral
-                analysis.foldRate > 0.2 -> 0.95 // Not folding enough - slightly tighter
-                else -> 0.9  // Way too loose - tighten but not drastically
-            }
-            
-            // Limit factors to reasonable ranges that prevent over-conservative play
-            aggressivenessFactor = aggressivenessFactor.coerceIn(0.8, 2.0)
-            handEvaluationFactor = handEvaluationFactor.coerceIn(0.9, 2.0)
-        }
     }
 
     fun showdown() {
     }
 
     fun version(): String {
-        return "dynamic as shit"
+        return "don't know what is happening as of now"
     }
 }
