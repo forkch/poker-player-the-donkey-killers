@@ -197,6 +197,10 @@ class Player {
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             if (ranking != null) {
+                // Flop/Turn: if rank < 2, fold
+                if (ranking.rank < 2) {
+                    return 0
+                }
                 // Flop/Turn: if rank >= 5, raise by big blind
                 if (ranking.rank >= 5) {
                     return gameState.current_buy_in + (gameState.small_blind * 2)
@@ -222,6 +226,10 @@ class Player {
         if (ourHoleCards != null && ourHoleCards.isNotEmpty()) {
             val ranking = getRanking(ourHoleCards, gameState.community_cards)
             if (ranking != null) {
+                // Flop/Turn: if rank < 2, fold
+                if (ranking.rank < 2) {
+                    return 0
+                }
                 // River: if rank >= 6, raise by big blind (most conservative)
                 if (ranking.rank >= 6) {
                     return gameState.current_buy_in + (gameState.small_blind * 2)
